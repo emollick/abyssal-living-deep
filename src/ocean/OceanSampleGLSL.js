@@ -1,3 +1,4 @@
+import { OCEAN_COUPLING_GLSL } from './OceanCouplingGLSL.js';
 /**
  * Shared ocean field sampling: three FFT cascades + analytic disaster
  * modifiers (solitons, rogue groups, vortices, hurricane swell, currents).
@@ -6,6 +7,7 @@
 export const OCEAN_SAMPLE_GLSL = /* glsl */ `
 #ifndef OCEAN_SAMPLE_GLSL
 #define OCEAN_SAMPLE_GLSL 1
+${OCEAN_COUPLING_GLSL}
 
 uniform sampler2D uOceanDisp0, uOceanDisp1, uOceanDisp2;
 uniform sampler2D uOceanDeriv0, uOceanDeriv1, uOceanDeriv2;
@@ -16,8 +18,6 @@ uniform float uOceanAniso;
 uniform vec3 uCascadeGain;
 uniform sampler2D uCurlTex;
 
-uniform vec4 uVortex0, uVortex1, uVortex2, uVortex3;
-uniform vec4 uSoliton0, uSoliton0b, uSoliton1, uSoliton1b;
 uniform vec4 uRogue, uRogueB;
 uniform vec4 uHurricane;
 uniform vec2 uWindDir;
@@ -32,11 +32,14 @@ const float EARTH_R = 6371000.0;
 // Slowly varying divergence-free-ish flow used to advect the small cascades.
 vec2 currentAt(vec2 p, float t) {
   vec2 uv = p * 0.00022 + vec2(t * 0.0009, -t * 0.0006);
-  vec4 c = texture(uCurlTex, uv);
+  vec4 c = textureLod(uCurlTex, uv, 0.0);
   vec2 f = (c.xy * 2.0 - 1.0);
   vec2 uv2 = p * 0.0009 - vec2(t * 0.0021, t * 0.0013);
-  vec4 c2 = texture(uCurlTex, uv2);
+  vec4 c2 = textureLod(uCurlTex, uv2, 0.0);
   f += (c2.xy * 2.0 - 1.0) * 0.45;
+  vec2 d=p-uDeepOrigin;
+  float plume=exp(-dot(d,d)/64000.0)*uUpwelling;
+  f+=vec2(-d.y,d.x)/max(30.0,length(d))*plume*0.18;
   return f;
 }
 
@@ -173,7 +176,7 @@ float hurricaneField(vec2 p, out vec2 swirl, out float calm) {
  * screen-space distribution, so it needs to be cheap.
  */
 float oceanEventHeight(vec2 p) {
-  float h = 0.0;
+  float h = deepSurfaceWave(p);
 
   vec4 vs[4];
   vs[0] = uVortex0; vs[1] = uVortex1; vs[2] = uVortex2; vs[3] = uVortex3;
@@ -250,8 +253,8 @@ vec3 oceanDisplacementLod(vec2 p, vec3 lods, out float foamHint) {
 
 /** Full analytic modifier stack, shared by vertex + CPU-side probes. */
 vec3 oceanModifiers(vec2 p, float t, out float crestOut, out float calmOut) {
-  vec3 d = vec3(0.0);
-  crestOut = 0.0;
+  vec3 d = vec3(0.0,deepSurfaceWave(p),0.0);
+  crestOut = min(abs(d.y)*0.07,0.55);
   calmOut = 0.0;
 
   float depression = 0.0, shear = 0.0;
@@ -310,6 +313,22 @@ vec2 swirlCoords(vec2 p, float t) {
 float earthDrop(vec2 p, vec3 camPos) {
   float r2 = dot(p - camPos.xz, p - camPos.xz);
   return uEarthCurvature * r2 / (2.0 * EARTH_R);
+}
+
+// Invert horizontal displacement near the lens. This samples every FFT
+// cascade and every live disaster, just as the visible ocean mesh does.
+float surfaceHeightAt(vec2 world,float time) {
+  vec2 planePoint=world;
+  vec3 displacement=vec3(0.0);
+  for(int i=0;i<3;i++) {
+    vec2 q=warpCoord(swirlCoords(planePoint,time),time,26.0);
+    float hint,crest,calm;
+    vec3 waves=oceanDisplacementLod(q,vec3(0.0),hint);
+    vec3 event=oceanModifiers(planePoint,time,crest,calm);
+    displacement=waves*(1.0-calm*0.8)+event;
+    planePoint=world-displacement.xz;
+  }
+  return uSeaLevel+displacement.y;
 }
 
 #endif

@@ -4,7 +4,11 @@ import { FullScreenPass, makeRT } from '../gfx/FullScreenPass.js';
 import { createHabitatGeometry } from './ReefGeometry.js';
 import { MarineLife } from './MarineLife.js';
 import { BACKGROUND_FRAG, WATER_GLSL } from './UnderwaterMaterial.js';
-import { habitatFor, seeded, currentAt, normalizeGenerator, parseSeed } from './WorldMath.js';
+import { HABITATS, habitatFor, seeded, currentAt, normalizeGenerator, parseSeed } from './WorldMath.js';
+import { connectedHabitat, oceanFloor, smooth } from './OceanDomain.js';
+import { OceanDynamics, DEEP_SOURCE, flowAt } from './OceanDynamics.js';
+import { createOceanTerrain, createPelagicLife } from './OceanTerrain.js';
+import { OCEAN_COUPLING_GLSL } from '../ocean/OceanCouplingGLSL.js';
 
 const VOLUME_FRAG = /* glsl */ `
 ${WATER_GLSL}
@@ -38,14 +42,14 @@ void main() {
     float facing=0.45+pow(max(dot(rd,sun),0.0),3.0)*0.9;
     col+=vec3(0.24,0.36,0.27)*shaft*0.080*uDiveLight*facing*(1.0-uDiveNight);
   }
-  // The lens briefly fills with water as the swimmer crosses the surface.
-  float crossing=1.0-smoothstep(0.0,0.65,abs(uCamPos.y));
-  col=mix(col,vec3(0.03,0.23,0.27),crossing*0.55);
+  float lampBeam=pow(max(dot(rd,uDiveForward),0.0),25.0)*uLamp;
+  col+=vec3(0.030,0.058,0.070)*lampBeam*(1.0-exp(-lengthRay*.026))*uDiveDeep;
   outColor=vec4(col,1.0);outVelocity=data;
 }
 `;
 
 const PARTICLE_VERT = /* glsl */ `
+${OCEAN_COUPLING_GLSL}
 attribute float aSeed;
 attribute float aSize;
 uniform float uTime;
@@ -53,23 +57,26 @@ uniform float uCurrent;
 uniform vec3 uCamPos;
 uniform float uSmoke;
 uniform float uPixelHeight;
+uniform float uSediment;
 varying float vAlpha;
 varying float vDist;
 varying vec3 vPos;
 void main() {
   vec3 p=position;
   if (uSmoke>0.5) {
-    float age=fract(aSeed+uTime*(0.025+aSeed*0.008));
-    p.y+=age*25.0;
-    p.x+=sin(age*8.0+aSeed*30.0)*age*4.0+age*age*uCurrent*10.0;
+    float activity=uUpwelling*(1.0+uSediment);
+    float age=fract(aSeed+uTime*(0.016+aSeed*0.008)*activity);
+    p.y+=age*(22.0+activity*14.0);
+    p.x+=sin(age*8.0+aSeed*30.0)*age*4.0+age*age*activity*5.0;
     p.z+=cos(age*9.0+aSeed*12.0)*age*3.0;
-    vAlpha=sin(age*3.14159)*0.14;
+    vAlpha=sin(age*3.14159)*0.16*min(activity,2.0);
   } else {
-    p.x+=uTime*uCurrent*0.17;
-    p.y-=uTime*0.036;
+    vec3 flow=oceanFlow(uCamPos,uTime);
+    p.x+=uTime*flow.x;
+    p.y+=uTime*(flow.y-0.05-uSurfaceMixing*0.06);
     p.z+=sin(uTime*0.06+aSeed*40.0)*0.55;
     p=mod(p-uCamPos+vec3(60.0,35.0,60.0),vec3(120.0,70.0,120.0))-vec3(60.0,35.0,60.0)+uCamPos;
-    vAlpha=0.23;
+    vAlpha=0.17+uSurfaceMixing*exp(min(0.0,uCamPos.y)/80.0)*0.16+uSediment*exp(-abs(uCamPos.y+1420.0)*.012)*.12;
   }
   vec4 v=viewMatrix*vec4(p,1.0);vDist=length(v.xyz);vPos=p;
   gl_Position=projectionMatrix*v;
@@ -105,37 +112,64 @@ function disposeTree(root) {
 export class UnderwaterWorld {
   constructor(app) {
     this.app=app;this.scene=new THREE.Scene();this.generation=0;
+    this.dynamics=new OceanDynamics();this.localCamera=new THREE.Vector3();
     this.shadowTarget=new THREE.WebGLRenderTarget(1536,1536,{depthBuffer:true,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter});
     this.shadowTarget.depthTexture=new THREE.DepthTexture(1536,1536,THREE.UnsignedIntType);
     this.shadowCamera=new THREE.OrthographicCamera(-86,86,86,-86,1,260);
     this.shadowMaterial=new THREE.MeshDepthMaterial();
     this.shadowDirection=new THREE.Vector3(9,9,9);
+    this.shadowCenter=new THREE.Vector3(1e6,1e6,1e6);
     this.background=new FullScreenPass(BACKGROUND_FRAG,app.ocean.bind({...U}),{name:'submerged-sky'});
     this.volume=new FullScreenPass(VOLUME_FRAG,{...U,uScene:{value:null},uDepth:{value:null},uShaftSteps:{value:12}},{name:'underwater-light-shafts'});
     const p=app.params;
+    U.uCausticSlope.value=app.ocean.cascades[1].derivatives;
+    U.uCausticSpan.value=app.ocean.lengthScales[1];
     this.settings=normalizeGenerator(Object.fromEntries(p.entries()));
-    this.generate(p.get('site')||'reef',parseSeed(p.get('seed'),habitatFor(p.get('site')).seed),this.settings);
+    this.generate(p.get('site')||'reef',parseSeed(p.get('seed'),713),this.settings);
   }
 
   generate(id, seed, input = this.settings) {
-    const settings=normalizeGenerator(input), base=habitatFor(id);
-    const habitat={...base,...settings,seed:parseSeed(seed,base.seed)};
-    const next=createHabitatGeometry(habitat);
-    const life=new MarineLife(habitat);
-    next.group.add(life.group);
-    const snow=this.makeParticles(habitat,next.ventPositions,false);next.group.add(snow);
-    if(next.ventPositions.length)next.group.add(this.makeParticles(habitat,next.ventPositions,true));
+    const settings=normalizeGenerator(input);seed=parseSeed(seed,713);
+    const recipe={...settings,seed,worldSeed:seed},root=new THREE.Group(),sites=new Map();
+    root.name='One connected ocean';root.add(createOceanTerrain(recipe));
+    for(const base of HABITATS) {
+      const habitat=connectedHabitat(base,seed,settings),next=createHabitatGeometry(habitat),life=new MarineLife(habitat);
+      next.group.position.set(habitat.origin[0],0,habitat.origin[1]);next.group.add(life.group);root.add(next.group);
+      if(next.ventPositions.length){
+        const vents=next.ventPositions.map(v=>[v[0]+habitat.origin[0],v[1],v[2]+habitat.origin[1]]);
+        root.add(this.makeParticles(habitat,vents,true));
+      }
+      sites.set(base.id,{habitat,group:next.group,life});
+    }
+    const snow=this.makeParticles(recipe,[],false);root.add(snow);
+    const pelagic=createPelagicLife(recipe);root.add(pelagic.group);
     if(this.root){this.scene.remove(this.root);disposeTree(this.root);}
-    this.root=next.group;this.scene.add(this.root);this.life=life;this.snow=snow;
+    this.root=root;this.scene.add(root);this.sites=sites;this.snow=snow;this.pelagic=pelagic;
     this.shadowDirty=true;
-    this.settings=settings;this.habitat=habitat;this.generation++;
+    this.settings=settings;this.seed=seed;this.recipe=recipe;this.habitat=sites.get(id)?.habitat||sites.get('reef').habitat;this.generation++;
+    this.life=sites.get(this.habitat.id).life;
     this.bornAt=this.app.time;
-    U.uWaterTint.value.fromArray(habitat.tint);U.uExtinction.value.fromArray(habitat.extinction);
-    U.uDiveDeep.value=id==='deep'?1:0;
     this.app.post && (this.app.post.reset=true);
     this.update(this.app.time,this.app.camera);
-    this.stats={fish:life.fishCount,animals:life.animals.length,vertices:0,seed:habitat.seed,generation:this.generation};
+    this.stats={fish:0,animals:pelagic.count,vertices:0,seed,generation:this.generation};
+    for(const site of sites.values()){this.stats.fish+=site.life.fishCount;this.stats.animals+=site.life.animals.length;}
     this.root.traverse(o=>{if(o.geometry)this.stats.vertices+=o.geometry.attributes.position.count;});
+  }
+
+  select(id) { const site=this.sites.get(id);if(site){this.habitat=site.habitat;this.life=site.life;}return this.habitat; }
+  floor(x,z) { return oceanFloor(x,z,{...this.settings,seed:this.seed}); }
+  flow(position) { return flowAt(position,this.app.time,this.app.weather?.state,this.settings,{mixing:this.dynamics.mixing,
+    vortices:[U.uVortex0.value,U.uVortex1.value,U.uVortex2.value,U.uVortex3.value],
+    solitons:[[U.uSoliton0.value,U.uSoliton0b.value],[U.uSoliton1.value,U.uSoliton1b.value]]}); }
+  tremor() { this.dynamics.tremor();if(this.app.camera.position.y<-900)this.app.cine.impulse(0.75); }
+  tick(dt) {
+    const w=this.app.weather?.state||{};
+    this.dynamics.update(dt,w,this.settings);
+    U.uDeepPulse.value.set(DEEP_SOURCE.x,DEEP_SOURCE.z,this.dynamics.pulseAge,this.dynamics.pulseStrength);
+    U.uUpwelling.value=this.settings.upwelling;U.uNutrientBloom.value=this.dynamics.nutrients;
+    U.uSurfaceMixing.value=this.dynamics.mixing;U.uSediment.value=this.dynamics.sediment;
+    U.uCurrentScale.value=this.settings.current;
+    U.uFlowForcing.value.set(Math.cos(w.windAngle??0),Math.sin(w.windAngle??0),.16+(w.windSpeed??5)*.018+(w.storm??0)*.75,w.swellHs??1);
   }
 
   makeParticles(habitat, vents, smoke) {
@@ -155,41 +189,54 @@ export class UnderwaterWorld {
     if(!camera)return;
     const w=this.app.weather?.state;
     const el=w?.sunElevation??0.66,cover=w?.cloudCoverage??0.12,storm=w?.storm??0;
+    const depth=Math.max(0,-camera.position.y),deep=smooth(100,900,depth);
+    const kelp=Math.exp(-((camera.position.x-150)**2+(camera.position.z-110)**2)/18000)*(1-smooth(40,110,depth));
+    const reef=Math.exp(-((camera.position.x+140)**2+(camera.position.z-140)**2)/23000)*(1-smooth(40,110,depth));
+    U.uWaterTint.value.set(.004+kelp*.021+reef*.002,.060+kelp*.025+reef*.045,.13-kelp*.065+reef*.015).lerp(new THREE.Vector3(.001,.006,.016),deep);
+    U.uExtinction.value.set(.027+kelp*.005,.012+kelp*.009+reef*.004,.009+kelp*.019+reef*.002).lerp(new THREE.Vector3(.031,.019,.015),deep);
+    U.uDiveDeep.value=deep;
     U.uDiveNight.value=1-THREE.MathUtils.smoothstep(el,-0.13,0.07);
     U.uDiveLight.value=(0.22+Math.sqrt(Math.max(0,Math.sin(el)))*0.9)*(1-cover*0.60)*(1-storm*0.35)*(1-U.uDiveNight.value*0.95);
     U.uCurrent.value=currentAt(time,Math.max(0,-camera.position.y),w?.windSpeed??5,storm)*this.settings.current;
     U.uClarity.value=this.settings.clarity;
     U.uBioStrength.value=this.settings.glow;
     camera.getWorldDirection(U.uDiveForward.value);
-    this.life.update(time-this.bornAt,camera.position);
+    for(const site of this.sites.values()){
+      const [x,z]=site.habitat.origin;
+      this.localCamera.set(camera.position.x-x,camera.position.y,camera.position.z-z);
+      site.life.update(time-this.bornAt,this.localCamera);
+      site.group.visible=Math.hypot(camera.position.x-x,camera.position.z-z)<530&&Math.abs(camera.position.y-site.habitat.eye[1])<330;
+    }
+    this.pelagic.update(time-this.bornAt,camera.position);
     this.root.traverse(o=>{if(o.material?.uniforms?.uPixelHeight)o.material.uniforms.uPixelHeight.value=this.app.renderHeight;});
   }
 
-  render(camera,target) {
+  render(camera,target,volume=true) {
     const r=this.app.renderer;
-    if(this.shadowDirty||this.shadowDirection.distanceToSquared(U.uSunDir.value)>0.0004)this.renderShadow();
+    if(camera.position.y>-200&&(this.shadowDirty||this.shadowDirection.distanceToSquared(U.uSunDir.value)>0.0004||this.shadowCenter.distanceToSquared(camera.position)>1600))this.renderShadow(camera);
     if(!this.composite||this.composite.width!==target.width||this.composite.height!==target.height){
       this.composite?.dispose();this.composite=makeRT(target.width,target.height,{count:2,name:'underwater-volume'});
     }
     r.setRenderTarget(target);r.setClearColor(0x001018,1);r.clear(true,true,false);
     this.background.render(r,target);r.render(this.scene,camera);
+    if(!volume){r.setRenderTarget(null);return target;}
     this.volume.set('uScene',target.textures[0]).set('uDepth',target.textures[1]);
     this.volume.set('uShaftSteps',['potato','low'].includes(this.app.quality.presetName)?8:18);
     this.volume.render(r,this.composite);r.setRenderTarget(null);return this.composite;
   }
 
-  renderShadow() {
+  renderShadow(camera) {
     const r=this.app.renderer,cam=this.shadowCamera;
-    const center=new THREE.Vector3(0,-this.habitat.depth+12,-5);
+    const center=new THREE.Vector3(camera.position.x,this.floor(camera.position.x,camera.position.z)+12,camera.position.z-18);
     const sun=U.uSunDir.value.clone();sun.y=Math.max(0.45,sun.y);sun.normalize();
     cam.position.copy(center).addScaledVector(sun,120);cam.lookAt(center);cam.updateMatrixWorld();
     U.uReefShadowMatrix.value.multiplyMatrices(cam.projectionMatrix,cam.matrixWorldInverse);
     const hidden=[];
-    this.root.traverse(o=>{if(o.isPoints||o===this.life.group){hidden.push([o,o.visible]);o.visible=false;}});
+    this.root.traverse(o=>{if(o.isPoints||o.name==='Marine life'||o===this.pelagic.group){hidden.push([o,o.visible]);o.visible=false;}});
     this.scene.overrideMaterial=this.shadowMaterial;
     r.setRenderTarget(this.shadowTarget);r.setClearColor(0xffffff,1);r.clear();r.render(this.scene,cam);
     this.scene.overrideMaterial=null;hidden.forEach(([o,v])=>o.visible=v);
     U.uReefShadow.value=this.shadowTarget.depthTexture;
-    this.shadowDirection.copy(U.uSunDir.value);this.shadowDirty=false;r.setRenderTarget(null);
+    this.shadowDirection.copy(U.uSunDir.value);this.shadowCenter.copy(camera.position);this.shadowDirty=false;r.setRenderTarget(null);
   }
 }

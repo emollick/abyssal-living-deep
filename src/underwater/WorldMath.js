@@ -1,9 +1,10 @@
+import { oceanFloor, constrainToOcean } from './OceanDomain.js';
 export const TAU = Math.PI * 2;
 
-export const GENERATOR_DEFAULTS = { relief: 1, life: 1, height: 1, shoal: 1, clarity: 1, current: 1, glow: 1 };
+export const GENERATOR_DEFAULTS = { relief: 1, life: 1, height: 1, shoal: 1, clarity: 1, current: 1, glow: 1, upwelling: 0.65 };
 
 export function normalizeGenerator(input = {}) {
-  const ranges = { relief: [0.2, 2.2], life: [0, 1.8], height: [0.3, 1.4], shoal: [0, 2], clarity: [0.35, 2], current: [0, 3], glow: [0, 3] };
+  const ranges = { relief: [0.2, 2.2], life: [0, 1.8], height: [0.3, 1.4], shoal: [0, 2], clarity: [0.35, 2], current: [0, 3], glow: [0, 3], upwelling: [0, 3] };
   const out = {};
   for (const [key, fallback] of Object.entries(GENERATOR_DEFAULTS)) {
     const n = Number(input[key]);
@@ -60,7 +61,7 @@ export const HABITATS = [
     subtitle: 'Life, after the light.',
     description: 'Mineral chimneys rise from the dark. Drifting jellies and living pinpoints of light reveal the shape of a hidden garden.',
     depth: 1434, color: '#a2e7de', tint: [0.002, 0.008, 0.018], extinction: [0.039, 0.025, 0.020],
-    eye: [0, -1419, 36], look: [0, -1425, -11], seed: 82017,
+    eye: [0, -1419, 36], look: [0, -1432, -11], seed: 82017,
     species: 'JELLYFISH · TUBE WORMS · HYDROTHERMAL VENTS',
   },
 ];
@@ -71,6 +72,7 @@ export function habitatFor(id) {
 
 export function floorHeight(x, z, habitat = HABITATS[0]) {
   const h = typeof habitat === 'string' ? habitatFor(habitat) : habitat;
+  if (h.connected) return oceanFloor(x+h.origin[0],z+h.origin[1],h);
   const phase = ((h.seed ?? 713) % 997) * 0.003;
   const relief = h.relief ?? 1;
   const broad = Math.sin(x * 0.039 + phase) * Math.cos(z * 0.036 + phase * 0.5) * 2.0 * relief;
@@ -99,6 +101,7 @@ export function cameraPose(habitat, elapsed) {
 }
 
 export function constrainSwimmer(position, habitat, clearance = 1.6) {
+  if (habitat.connected) return constrainToOcean(position, habitat, clearance);
   const radius = Math.hypot(position.x, position.z);
   if (radius > 125) { position.x *= 125 / radius; position.z *= 125 / radius; }
   position.y = Math.max(floorHeight(position.x, position.z, habitat) + clearance, position.y);

@@ -145,14 +145,14 @@ function whaleGeometry() {
   return merge(parts);
 }
 
-function jellyGeometry(rng) {
+export function jellyGeometry(rng,detail=1) {
   const parts=[];
-  const bell=new THREE.SphereGeometry(1,32,20,0,TAU,0,Math.PI*0.59);
+  const bell=new THREE.SphereGeometry(1,Math.round(32*detail),Math.round(20*detail),0,TAU,0,Math.PI*0.59);
   bell.scale(1.15,0.8,1.15); solid(bell,'#8ae9e3'); parts.push(bell);
   for(let j=0;j<18;j++) {
     const a=j/18*TAU, len=2.4+rng()*3.7;
     const pts=Array.from({length:22},(_,k)=>{const t=k/21;return new THREE.Vector3(Math.cos(a)*(0.99-t*0.45)+Math.sin(t*10+a)*t*0.27,-0.23-t*len,Math.sin(a)*(0.99-t*0.45)+Math.cos(t*9+a)*t*0.22);});
-    const g=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),32,j%3===0?0.027:0.012,4,false);
+    const g=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),Math.round(32*detail),j%3===0?0.027:0.012,4,false);
     paintGeometry(g,j%3===0?'#cbb8e8':'#78dacf',rng,(x,y)=>Math.max(0,-y)*0.2); parts.push(g);
   }
   for(let j=0;j<4;j++) {

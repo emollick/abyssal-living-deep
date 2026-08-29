@@ -1,6 +1,6 @@
 {
   "name": "abyssal-living-deep",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
   "description": "A seeded underwater world beneath ABYSSAL's procedural ocean: coral reefs, kelp forests, marine life, volumetric light and a bioluminescent deep, with live generation and weather dials.",
   "license": "MIT",
@@ -42,7 +42,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "test": "node tools/quality-sim.mjs && node tools/underwater-sim.mjs",
+    "test": "node tools/quality-sim.mjs && node tools/underwater-sim.mjs && node tools/connected-ocean-sim.mjs",
     "smoke": "node tools/smoke.mjs"
   },
   "dependencies": {

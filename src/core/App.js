@@ -16,6 +16,7 @@ import { PostFX } from '../post/PostFX.js';
 import { CinematicCamera } from '../camera/CinematicCamera.js';
 import { GpuProfiler } from './GpuProfiler.js';
 import { UnderwaterWorld } from '../underwater/UnderwaterWorld.js';
+import { WaterInterface } from '../underwater/WaterInterface.js';
 
 export class App {
   constructor(canvas, onProgress = () => {}) {
@@ -120,6 +121,7 @@ export class App {
 
     this.onProgress('growing the underwater world', 0.90);
     this.underwater = new UnderwaterWorld(this);
+    this.waterInterface = new WaterInterface(this);
 
     this.onProgress('warming shaders', 0.94);
     this.ocean.update(1 / 60);
@@ -166,6 +168,8 @@ export class App {
       type: THREE.HalfFloatType, count: 2, depthBuffer: true,
       minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, name: 'hdrMRT',
     });
+    this.waterRT?.dispose();
+    this.waterRT=makeRT(w,h,{type:THREE.HalfFloatType,count:2,depthBuffer:true,name:'connected-underwater'});
 
     if (!this.post) this.post = new PostFX(this.renderer, w, h);
     else this.post.setSize(w, h);
@@ -200,14 +204,10 @@ export class App {
     if (this.quality.tick(this.frameMs)) this._resize();
 
     this.beforeUpdate?.(scaled, dt);
+    this.underwater?.tick(scaled);
 
     const prof = this.profiler;
     this.cine.update(dt, this.time);
-    const submerged = this.camera.position.y < U.uSeaLevel.value - 0.12;
-    if (submerged !== this.submerged) {
-      this.submerged = submerged;
-      this.post.reset = true;
-    }
     prof.begin('oceanFFT');
     this.ocean.update(scaled);
     prof.end('oceanFFT');
@@ -227,10 +227,9 @@ export class App {
     // the camera, kept clear of the eye so the ray intersection stays valid on
     // shots that are deliberately overtopped.
     const camY = this.camera.position.y - U.uSeaLevel.value;
-    const localMean = this.director?.hasEvents()
-      ? this.director.eventHeight(this.camera.position.x, this.camera.position.z) : 0;
+    const localMean = (this.director?.eventHeight(this.camera.position.x, this.camera.position.z)||0)
+      +(this.underwater?.dynamics.surfaceHeight(this.camera.position.x,this.camera.position.z)||0);
     this.oceanMesh.material.uniforms.uGridPlane.value = Math.min(localMean, camY - 0.5);
-    this.oceanMesh.update(this.camera.position, U.uSeaLevel.value + localMean);
 
     // ---- TAA jitter
     this.camera.updateProjectionMatrix();
@@ -244,47 +243,59 @@ export class App {
     }
 
     updateFrameUniforms(this.camera, this._projNoJitter, dt, this.time, this.frame);
+    const surfaceY=this.waterInterface.sample(this.camera);
+    this.oceanMesh.update(this.camera.position,surfaceY);
+    const lensDepth=surfaceY-this.camera.position.y;
+    this.submerged=lensDepth>0;
+    const boundary=Math.max(3,(this.ocean.significantWaveHeight||0)*1.5);
+    const nearSurface=Math.abs(lensDepth)<boundary;
+    const needAir=lensDepth<0||nearSurface;
+    const bottomStrength=(1-THREE.MathUtils.smoothstep(-this.underwater.floor(this.camera.position.x,this.camera.position.z),85,160))
+      *(1-THREE.MathUtils.smoothstep(this.camera.position.y,100,200))
+      *(1-THREE.MathUtils.smoothstep(this.underwater.dynamics.mixing,.5,.95));
+    const needWater=lensDepth>0||nearSurface||bottomStrength>.001;
+    this.underwater.update(this.time,this.camera);
     this.afterUpdate?.(scaled, dt);
 
-    if (submerged) {
-      prof.begin('underwater');
-      this.underwater.update(this.time, this.camera);
-      const waterRT = this.underwater.render(this.camera, this.hdrRT);
-      prof.end('underwater');
-      prof.begin('post');
-      this.post.render(waterRT.textures[0], waterRT.textures[1], null);
-      prof.end('post');
-      prof.collect();
-      return;
-    }
-
     prof.begin('particles');
-    this.rain.update(this.camera, U.uRain.value, this.hdrRT.height);
-    this.spray.update(scaled, U.uSprayAmount.value);
+    if(needAir){this.rain.update(this.camera,U.uRain.value,this.hdrRT.height);this.spray.update(scaled,U.uSprayAmount.value);}
     prof.end('particles');
 
     // clouds march against the unjittered matrices set just above
     prof.begin('clouds');
-    this.clouds.update(this.time, dt);
+    if(needAir||(lensDepth<140&&this.frame%8===0))this.clouds.update(this.time,dt);
     prof.end('clouds');
     this.sky.setCloudTextures(this.clouds.screenTexture, this.clouds.envTexture);
     prof.begin('envProbe');
-    this.sky.renderEnv();
+    if(needAir||this.frame%8===0)this.sky.renderEnv();
     prof.end('envProbe');
 
     // ---- main pass
     const r = this.renderer;
+    let water;
+    U.uBottomVisible.value=0;
+    if(needWater){
+      prof.begin('underwater');
+      water=this.underwater.render(this.camera,this.waterRT,lensDepth>-.5);
+      prof.end('underwater');
+      U.uBottomVisible.value=bottomStrength;
+    }
+    // The surface already uses the WebGL sampler budget. In clear shallows,
+    // the fine foam slot carries the refracted view; larger cascades retain
+    // their foam history. Outside that view all three foam cascades remain.
+    this.oceanMesh.uniforms.uOceanTurb2.value=bottomStrength>.001&&water?water.textures[0]:this.ocean.cascades[2].turbulence;
     prof.begin('scene');
-    r.setRenderTarget(this.hdrRT);
-    r.setClearColor(0x000000, 1);
-    r.clear(true, true, false);
-    r.render(this.scene, this.camera);
+    if(needAir){
+      r.setRenderTarget(this.hdrRT);r.setClearColor(0x000000,1);r.clear(true,true,false);
+      r.render(this.scene,this.camera);
+    }
     r.setRenderTarget(null);
     prof.end('scene');
 
     this.post.settings.focusDistance = this.cine.focusDistance;
     prof.begin('post');
-    this.post.render(this.hdrRT.textures[0], this.hdrRT.textures[1], null);
+    const result=nearSurface?this.waterInterface.render(this.hdrRT,water):needAir?this.hdrRT:water;
+    this.post.render(result.textures[0],result.textures[1],null);
     prof.end('post');
     prof.collect();
 

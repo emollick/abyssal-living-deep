@@ -20,7 +20,7 @@ body.diving #sandbox, body.diving .letterbox { display: none !important; }
 .dive-caption { position: absolute; left: 40px; bottom: 131px; max-width: 640px; transition: opacity .35s; }
 .dive-eyebrow { font: 10px/1.6 ui-monospace,Consolas,monospace; letter-spacing: .18em; margin-bottom: 12px; color: #d5e9d1; display: flex; align-items: center; gap: 9px; }
 .dive-eyebrow::before { content: ''; width: 22px; height: 1px; background: #d5e9d1; }
-.dive-caption h1 { font: normal clamp(30px,4.6vw,63px)/1.08 Georgia, 'Times New Roman',serif; letter-spacing: -.035em; text-shadow: 0 2px 28px #001b2270; }
+.dive-caption h1 { font: normal clamp(30px,4.6vw,63px)/1.08 Georgia, 'Times New Roman',serif; letter-spacing: -.035em; text-shadow: 0 2px 6px #00121baa, 0 2px 28px #001b2270; }
 .dive-caption p { font-size: 13px; line-height: 1.7; color: #d0e2d9; margin-top: 11px; letter-spacing: .015em; }
 .dive-depth { position: absolute; top: 37%; right: 36px; text-align: right; font: 10px ui-monospace,Consolas,monospace; color: #d2e5dc; }
 .dive-depth strong { font: 29px/1.3 Georgia,serif; letter-spacing: -.025em; font-weight: normal; color: #f1f0dd; }
@@ -87,6 +87,21 @@ body.dive-clean #expedition button, body.dive-clean #expedition input, body.dive
 body.dive-clean #expedition .show-dive-ui { display: block; opacity: .65; pointer-events: auto; background: #041d2980; border: 1px solid #b7cbbb55; }
 body.lab-open .dive-depth { opacity: 0; }
 .dive-mobile { display: none; }
+.dive-journey { position: absolute; top: 119px; left: 36px; width: 310px; font: 11px/1.5 ui-monospace,Consolas,monospace; color: #d9e7d2; }
+.dive-journey[hidden] { display: none; }
+#expedition #journey-stop { background: transparent; border: 0; border-bottom: 1px solid #acc8b66b; color: #e6ead6; font-size: 10px; padding: 4px 0; margin-left: 16px; }
+#journey-progress { display: block; appearance: none; border: 0; height: 2px; width: 100%; margin-top: 12px; background: #d8ead225; }
+#journey-progress::-webkit-progress-bar { background: #d8ead225; }
+#journey-progress::-webkit-progress-value { background: #d9e5b2; }
+.depth-stops { display: flex; flex-direction: column; gap: 0; margin-top: 21px; border-right: 1px solid #b4d8c75c; }
+#expedition .depth-stops button { position: relative; padding: 0 17px 0 0; min-height: 43px; border: 0; background: transparent; text-align: right; font: 9px ui-monospace,Consolas,monospace; color: #d1e1d4; }
+.depth-stops i { position: absolute; width: 8px; height: 1px; right: 0; top: 9px; background: #afcdb4; transition: width .2s; }
+#expedition .depth-stops button:hover i { width: 15px; background: #f1efc3; }
+.depth-stops small { font-size: 8px; color: #adcac1; letter-spacing: .035em; margin-top: 3px; }
+.lab-events { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 15px; }
+.lab-more { border-top: 1px solid #aecabd2b; padding-top: 13px; color: #cbdccd; font-size: 10px; }
+.lab-more summary { cursor: pointer; padding: 5px 0; }
+#expedition .lab-wide { width: 100%; margin-top: 6px; }
 @media(max-width: 900px) {
   .dive-edition { display: none; }
   .dive-caption { bottom: 165px; }
@@ -110,9 +125,16 @@ body.lab-open .dive-depth { opacity: 0; }
   .dive-site .site-name { font-size: 10px; }
   #expedition .dive-site { padding-right: 7px; }
   .dive-status { top: 75px; left: 20px; font-size: 8px; }
+  .dive-journey { top: 103px; left: 20px; width: calc(100vw - 115px); font-size: 9px; }
+  #expedition #journey-stop { margin-left: 9px; font-size: 9px; }
+  #expedition .dive-actions .dive-action { padding: 0 8px; gap: 4px; }
+  .dive-actions .dive-action svg { width: 12px; }
+  .dive-wordmark { font-size: 16px; letter-spacing: .16em; }
   .dive-depth { right: 20px; top: 26%; }
   .dive-depth strong { font-size: 23px; }
   .depth-rule { height: 55px; }
+  .depth-stops { margin-top: 14px; }
+  #expedition .depth-stops button { min-height: 42px; }
   .dive-keyhint { display: none; }
   .dive-transport { align-self: flex-start; }
   .dive-lab { top: 74px; right: 12px; left: 12px; bottom: 153px; width: auto; padding: 22px; }
@@ -120,7 +142,7 @@ body.lab-open .dive-depth { opacity: 0; }
   .dive-toast { width: calc(100vw - 48px); text-align: center; bottom: 154px; }
   .dive-help { padding: 26px; }
   .dive-help h2 { font-size: 30px; }
-  .dive-mobile { position: absolute; top: 43%; right: 16px; display: none; grid-template-columns: repeat(2,42px); gap: 5px; }
+  .dive-mobile { position: absolute; bottom: 210px; right: 16px; display: none; grid-template-columns: repeat(2,42px); gap: 5px; }
   body.dive-swimming .dive-mobile { display: grid; }
   #expedition .dive-mobile button { width: 42px; height: 42px; background: #082630aa; border: 1px solid #adc9b557; font-size: 17px; touch-action: none; }
   body.lab-open .dive-mobile { display: none; }

@@ -313,6 +313,11 @@ void skyAmbient(vec3 viewPos, vec3 rd) {
   // arrives sideways from the bright ring under the deck edge and is piped
   // through the cloud by high-order scattering the light march truncates.
   gAmbBottom = (side * 0.50 + up * 0.15) * uSunIntensity * vec3(0.80, 0.88, 1.0);
+  // The sun LUT reaches zero at night; the visible moon and sky still light
+  // cloud. Keep that weak fill so a night deck retains shape against the stars.
+  float night=1.0-smoothstep(-.10,.06,uSunDir.y);
+  gAmbTop+=vec3(.006,.012,.024)*night;
+  gAmbBottom+=vec3(.002,.004,.009)*night;
 }
 
 // Extinction per unit density per metre. Real cumulus sit around 0.05/m, which

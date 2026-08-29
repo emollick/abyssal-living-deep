@@ -95,6 +95,19 @@ export const U = {
   uDiveForward: { value: new THREE.Vector3(0, 0, -1) },
   uReefShadow: { value: null },
   uReefShadowMatrix: { value: new THREE.Matrix4() },
+  uCascadeGain: { value: new THREE.Vector3(1, 1, 1) },
+  uDeepOrigin: { value: new THREE.Vector2(0, -782) },
+  uDeepPulse: { value: new THREE.Vector4(0, -782, 1000, 0) },
+  uUpwelling: { value: 0.65 },
+  uNutrientBloom: { value: 0.2 },
+  uSurfaceMixing: { value: 0 },
+  uCurrentScale: { value: 1 },
+  uFlowForcing: { value: new THREE.Vector4(1, 0, 0.25, 1) },
+  uSediment: { value: 0 },
+  uCameraWaterDepth: { value: 20 },
+  uBottomVisible: { value: 0 },
+  uCausticSlope: { value: null },
+  uCausticSpan: { value: 128 },
 };
 
 /**

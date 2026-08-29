@@ -63,6 +63,9 @@ uniform float uSkirt;
 uniform float uGridPlane;
 uniform float uCurrentStrength;
 uniform float uDisplaceScale;
+uniform float uNearPatch;
+uniform vec2 uPatchOrigin;
+uniform float uPatchCell;
 // Loop bounds, deliberately not compile-time constants. With literals the
 // driver unrolls the ray search into forty inlined copies of the event field
 // and the HLSL translation never finishes compiling.
@@ -206,7 +209,36 @@ vec2 seaHit(vec3 dir, float eyeHeight) {
   return vec2(t, 0.0);
 }
 
+void placeSurface(vec2 world,vec3 lods,float horizonFade){
+  vec2 q=warpCoord(swirlCoords(world,uTime),uTime,uCurrentStrength);
+  float foamHint,crest,calm;
+  vec3 disp=oceanDisplacementLod(q,lods,foamHint)*uDisplaceScale;
+  vec3 mods=oceanModifiers(world,uTime,crest,calm);
+  disp*=1.0-calm*.8;
+  vWaveY=disp.y*horizonFade;
+  vEventY=mods.y*horizonFade;
+  disp=(disp+mods)*horizonFade;
+  vec3 wp=vec3(world.x+disp.x,uSeaLevel+disp.y,world.y+disp.z);
+  wp.y-=earthDrop(world,uCamPos);
+  vWorldPos=wp;vFlatPos=world;vDisp=disp;vDist=length(wp-uCamPos);
+  vCrest=crest;vCalm=calm;vLods=lods;
+  vClipNJ=uViewProjNJ*vec4(wp,1.0);
+  vPrevClipNJ=uPrevViewProjNJ*vec4(wp,1.0);
+  gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.0);
+}
+
 void main(){
+  // A regular local grid continues behind and below a lens in a wave trough.
+  // The distant projected grid alone cannot cover that view: its near rows
+  // can be displaced through the camera, exposing the ends of triangles.
+  if(uNearPatch>.5){
+    vec2 grid=aGrid*2.0-1.0;
+    vec2 world=uPatchOrigin+grid*abs(grid)*96.0;
+    float cell=uPatchCell*(2.0*max(abs(grid.x),abs(grid.y))+uPatchCell/192.0);
+    vec3 lods=log2(max(vec3(cell)/(uOceanScales/uOceanTexels),vec3(1.0)));
+    placeSurface(world,lods,1.0);
+    return;
+  }
   // A flat margin cannot guarantee coverage. Every vertex is placed on the
   // *undisplaced* sea and then moved by up to a few metres horizontally, and
   // for the bottom row — water eight metres from the lens — a few metres is a
@@ -266,6 +298,7 @@ void main(){
     bandDisc(uVortex1.xy, uVortex1.z * 3.0, uVortex1.w, o2, d2, span);
     bandDisc(uVortex2.xy, uVortex2.z * 3.0, uVortex2.w, o2, d2, span);
     bandDisc(uVortex3.xy, uVortex3.z * 3.0, uVortex3.w, o2, d2, span);
+    if(uDeepPulse.z>1.4&&uDeepPulse.z<135.4)bandDisc(uDeepPulse.xy,(uDeepPulse.z-1.4)*22.0+100.0,uDeepPulse.w,o2,d2,span);
 
     if (span.y > span.x) {
       float lo = max(span.x / horiz, 0.05);
@@ -323,45 +356,7 @@ void main(){
 
   vec3 texel = uOceanScales / uOceanTexels;
   vec3 lods = log2(max(vec3(cell) / texel, vec3(1.0)));
-  vLods = lods;
-
-  vec2 q = swirlCoords(world, uTime);
-  q = warpCoord(q, uTime, uCurrentStrength);
-
-  float foamHint;
-  vec3 disp = oceanDisplacementLod(q, lods, foamHint) * uDisplaceScale;
-
-  float crest, calm;
-  vec3 mods = oceanModifiers(world, uTime, crest, calm);
-  disp *= (1.0 - calm * 0.8);
-  // Wind waves and disaster displacement have to stay separable. Shading uses
-  // crest height as a stand-in for how thin the water is — a metre-high crest
-  // with the sun behind it glows — and the two are only interchangeable while
-  // the sea is made of wind waves. Fold in a forty metre tsunami and every
-  // "thin sheet" term pins to its maximum across the entire wall, which is
-  // what turned the face into a slab of jade.
-  float waveY = disp.y;
-  disp += mods;
-
-  // fade the vertical relief out right at the horizon so the silhouette stays clean
-  float horizonFade = 1.0 - snapped * 0.92;
-  disp *= horizonFade;
-  vWaveY = waveY * horizonFade;
-  vEventY = mods.y * horizonFade;
-
-  vec3 wp = vec3(world.x + disp.x, uSeaLevel + disp.y, world.y + disp.z);
-  wp.y -= earthDrop(world, uCamPos);
-
-  vWorldPos = wp;
-  vFlatPos = world;
-  vDisp = disp;
-  vDist = length(wp - uCamPos);
-  vCrest = crest;
-  vCalm = calm;
-
-  vClipNJ = uViewProjNJ * vec4(wp, 1.0);
-  vPrevClipNJ = uPrevViewProjNJ * vec4(wp, 1.0);
-  gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+  placeSurface(world,lods,1.0-snapped*.92);
 }
 `;
 
@@ -405,6 +400,12 @@ uniform float uAmbientFlash;
 uniform float uExposure;
 uniform float uUnderwater;
 uniform float uDebugMode;
+uniform float uBottomVisible;
+uniform float uBioStrength;
+uniform float uDiveNight;
+uniform float uNearPatch;
+uniform float uNearPatchEnabled;
+uniform vec2 uPatchOrigin;
 
 ${ATMO_COMMON}
 ${AERIAL_GLSL}
@@ -459,6 +460,10 @@ float cloudShadow(vec3 p, vec3 L) {
 }
 
 void main(){
+  if(uNearPatchEnabled>.5){
+    float radius=length(vFlatPos-uPatchOrigin);
+    if((uNearPatch>.5&&radius>80.0)||(uNearPatch<.5&&radius<=80.0))discard;
+  }
   vec2 q = swirlCoords(vFlatPos, uTime);
   q = warpCoord(q, uTime, uCurrentStrength);
 
@@ -571,7 +576,7 @@ void main(){
   // ------------------------------------------------------------------- foam
   vec4 t0 = sampleCascadeGrad(uOceanTurb0, q, uOceanScales.x, ddx, ddy);
   vec4 t1 = sampleCascadeGrad(uOceanTurb1, q, uOceanScales.y, ddx, ddy);
-  vec4 t2 = sampleCascadeGrad(uOceanTurb2, q, uOceanScales.z, ddx, ddy);
+  vec4 t2 = uBottomVisible>.001?t1:sampleCascadeGrad(uOceanTurb2,q,uOceanScales.z,ddx,ddy);
   // The cascades overlap in space, so take the strongest raft rather than the
   // sum — adding them triple-counts a crest that all three see.
   float rawFoam = max(max(t0.r * 0.75, t1.r), t2.r * 0.45);
@@ -688,6 +693,17 @@ void main(){
   // Whatever little climbs back out of the deep water below.
   vec3 deep = uWaterAbsorb * skyAmb * 0.8;
   vec3 refracted = scatter + deep;
+  if(uBottomVisible>.001){
+    vec2 refUV=gl_FragCoord.xy/uResolution+N.xz*0.009/(1.0+vDist*.012);
+    refUV=clamp(refUV,vec2(.001),vec2(.999));
+    vec4 below=texture(uOceanTurb2,refUV);
+    float hasBed=1.0-smoothstep(190.0,320.0,below.a*400.0);
+    refracted=mix(refracted,below.rgb,hasBed*.87*uBottomVisible);
+  }
+  vec2 plumeAt=vWorldPos.xz-uDeepOrigin;
+  float bloom=uNutrientBloom*exp(-dot(plumeAt,plumeAt)/100000.0);
+  float eddies=.45+.55*vnoise3(vec3(vWorldPos.xz*.025,uTime*.028));
+  refracted+=vec3(.008,.044,.021)*bloom*eddies*(beam+skyAmb)*2.2;
 
   // ------------------------------------------------------------- combine
   vec3 color = mix(refracted, env, F) + spec;
@@ -734,6 +750,11 @@ void main(){
     color = mix(color, mix(color, foamLit, 0.20), foamThin * (1.0 - foam));
   }
 
+  // Living light is emitted by the disturbed water and foam. Applying it
+  // before the foam layer would cover it with unlit foam on a moonless night.
+  float livingCrests=pow(clamp(foam*.8+max(vWaveY,0.0)*.17,0.0,1.0),1.65);
+  float livingDetail=.35+pow(foamFine,.7)*1.5;
+  color+=vec3(.034,.75,1.17)*bloom*eddies*uBioStrength*uDiveNight*(.018+livingCrests*livingDetail*2.2);
   color += vec3(rainRip) * sun * 0.02;
   vec3 preLightning = color;
 
@@ -800,6 +821,10 @@ export class OceanMesh {
       uEventBisect: { value: 8 },
       uCurrentStrength: { value: 26.0 },
       uDisplaceScale: { value: 1.0 },
+      uNearPatch: { value: 0.0 },
+      uNearPatchEnabled: { value: 0.0 },
+      uPatchOrigin: { value: new THREE.Vector2() },
+      uPatchCell: { value: 1.0 },
       uCascadeGain: { value: new THREE.Vector3(1, 1, 1) },
       uWaterScatter: { value: new THREE.Vector3(0.018, 0.075, 0.088) },
       uWaterAbsorb: { value: new THREE.Vector3(0.004, 0.021, 0.036) },
@@ -847,6 +872,15 @@ export class OceanMesh {
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 0;
+    this.nearMaterial=new THREE.RawShaderMaterial({
+      name:'OceanSurfaceNearLens',glslVersion:THREE.GLSL3,
+      vertexShader:VERT,fragmentShader:FRAG,
+      uniforms:{...uniforms,uNearPatch:{value:1.0}},
+      side:THREE.DoubleSide,depthWrite:true,depthTest:true,
+    });
+    this.nearMesh=new THREE.Mesh(new THREE.BufferGeometry(),this.nearMaterial);
+    this.nearMesh.frustumCulled=false;this.nearMesh.visible=false;
+    this.mesh.add(this.nearMesh);
     this.setResolution(quality.oceanGridX, quality.oceanGridY);
   }
 
@@ -858,6 +892,10 @@ export class OceanMesh {
     this.mesh.geometry = buildProjectedGrid(gridX, gridY);
     if (old) old.dispose();
     this.uniforms.uGridSize.value.set(gridX, gridY);
+    const patchCells=Math.max(96,Math.min(320,Math.round(gridX*.75)));
+    this.nearMesh.geometry.dispose();
+    this.nearMesh.geometry=buildProjectedGrid(patchCells,patchCells);
+    this.uniforms.uPatchCell.value=192/patchCells;
     this.triangles = gridX * gridY * 2;
   }
 
@@ -869,10 +907,14 @@ export class OceanMesh {
    */
   update(camPos, surfaceY = 0) {
     this.uniforms.uUnderwater.value = camPos.y < surfaceY ? 1 : 0;
+    this.nearMesh.visible=Math.abs(camPos.y-surfaceY)<35;
+    this.uniforms.uNearPatchEnabled.value=this.nearMesh.visible?1:0;
+    this.uniforms.uPatchOrigin.value.set(camPos.x,camPos.z);
   }
 
   dispose() {
     this.mesh.geometry.dispose();
     this.material.dispose();
+    this.nearMesh.geometry.dispose();this.nearMaterial.dispose();
   }
 }

@@ -74,7 +74,12 @@ vec3 renderSky(vec3 dir, vec3 camPos) {
 
   // night sky
   float night = clamp(1.0 - (uSunDir.y + 0.12) * 6.0, 0.0, 1.0);
-  lum += starField(dir, uStarIntensity * night) * 0.0016;
+  lum += starField(dir, uStarIntensity * night) * 0.07;
+  float moonAngle=acos(clamp(dot(dir,uMoonDir),-1.0,1.0));
+  float moon=1.0-smoothstep(.0045,.0054,moonAngle);
+  float halo=exp(-moonAngle*moonAngle/0.012);
+  lum+=vec3(.23,.27,.32)*moon*night;
+  lum+=vec3(.003,.007,.018)*night*(.4+max(dir.y,0.0)*.6+halo*1.2);
 
   return lum;
 }

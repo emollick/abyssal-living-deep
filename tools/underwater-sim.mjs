@@ -17,7 +17,7 @@ check(stream.every(v=>v>=0&&v<1),'Seed stream must stay in [0,1).');
 check(stream.some(v=>v!==r3()),'Different seeds must change the generator.');
 check(parseSeed('coral')===parseSeed('coral'),'Text seeds must be reproducible.');
 check(parseSeed('4294967295')===4294967295,'Full uint32 seeds must survive sharing.');
-assert.deepEqual(normalizeGenerator({relief:'NaN',life:-20,shoal:200,clarity:0}),{relief:1,life:0,height:1,shoal:2,clarity:.35,current:1,glow:1});checks++;
+assert.deepEqual(normalizeGenerator({relief:'NaN',life:-20,shoal:200,clarity:0}),{relief:1,life:0,height:1,shoal:2,clarity:.35,current:1,glow:1,upwelling:.65});checks++;
 
 const a=createHabitatGeometry({...HABITATS[0],life:0.2});
 const hash=digest(a.group);dispose(a.group);

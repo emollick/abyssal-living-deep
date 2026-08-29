@@ -74,7 +74,9 @@ uniform float uTilesX;
 in vec2 vUv;
 layout(location = 0) out vec4 oCol;
 void main(){
-  vec2 px = floor(vUv * vec2(uRes * uTilesX, uRes));
+  // The atlas has several rows of depth slices. Scaling vUv.y by only uRes
+  // repeats the first row through the volume and makes the sky into slabs.
+  vec2 px = floor(gl_FragCoord.xy);
   float tileX = floor(px.x / uRes);
   float tileY = floor(px.y / uRes);
   float z = tileX + tileY * uTilesX;
@@ -108,7 +110,7 @@ uniform float uTilesX;
 in vec2 vUv;
 layout(location = 0) out vec4 oCol;
 void main(){
-  vec2 px = floor(vUv * vec2(uRes * uTilesX, uRes));
+  vec2 px = floor(gl_FragCoord.xy);
   float tileX = floor(px.x / uRes);
   float tileY = floor(px.y / uRes);
   float z = tileX + tileY * uTilesX;

@@ -54,7 +54,7 @@ export function segment(a, b, radiusA, radiusB, sides = 6) {
   return g;
 }
 
-function rockGeometry(seed = 1) {
+export function rockGeometry(seed = 1) {
   const g = new THREE.SphereGeometry(1, 22, 14);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
@@ -185,7 +185,7 @@ export function createHabitatGeometry(habitat) {
   const plants = new Batch(waterMaterial(3, { name: 'kelp' }));
   const brains = new Batch(waterMaterial(2, { name: 'brain-coral', pattern: 1 }));
   const luminous = new Batch(waterMaterial(2, { name: 'living-lights', glow: habitat.id === 'deep' ? 0.75 : 0.13 }));
-  addTerrain(group, habitat, rng);
+  if (!habitat.connected) addTerrain(group, habitat, rng);
   const isDeep = habitat.id === 'deep', isBlue = habitat.id === 'blue', isKelp = habitat.id === 'kelp';
   const palette = isDeep ? ['#83cbb8', '#57d9d2', '#b49fe3', '#dbb994'] : ['#e4a382', '#d7859a', '#bd8ec1', '#d6c17b', '#d09b58', '#aeccba'];
   const rockCount = isBlue ? 95 : 200;

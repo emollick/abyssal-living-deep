@@ -132,6 +132,7 @@ uniform float uSpeedUp;
 uniform float uSpeedDown;
 uniform float uCompensation;
 uniform float uFixedExposure;
+uniform float uFixedExposureMix;
 uniform float uMinEV;
 uniform float uMaxEV;
 uniform float uReset;
@@ -143,7 +144,8 @@ void main(){
   // EV100 from average luminance (ISO 100, K = 12.5)
   float ev = log2(max(avg, 1e-4) * 100.0 / 12.5);
   ev = clamp(ev + uCompensation, uMinEV, uMaxEV);
-  float target = uFixedExposure > 0.0 ? uFixedExposure : 1.0 / (1.2 * exp2(ev));
+  float automatic=1.0/(1.2*exp2(ev));
+  float target = uFixedExposure > 0.0 ? mix(automatic,uFixedExposure,uFixedExposureMix) : automatic;
   float prev = texture(uPrev, vec2(0.5)).r;
   if (uReset > 0.5 || prev <= 0.0) { oColor = vec4(target); return; }
   float speed = (target < prev) ? uSpeedDown : uSpeedUp;
@@ -536,6 +538,7 @@ export class PostFX {
       tonemap: 0,
       exposureBias: 1.0,
       fixedExposure: 0,
+      fixedExposureMix: 1,
       sharpen: 0.45,
     };
     this.flashColor = new THREE.Vector3(0.8, 0.88, 1.0);
@@ -592,7 +595,7 @@ export class PostFX {
         exposure: new FullScreenPass(EXPOSURE_FRAG, {
           uLum: { value: null }, uPrev: { value: null }, uDt: { value: 0.016 },
           uSpeedUp: { value: 1.4 }, uSpeedDown: { value: 0.7 }, uCompensation: { value: 0.4 },
-          uMinEV: { value: -5.0 }, uMaxEV: { value: 17.0 }, uReset: { value: 1 }, uFixedExposure: { value: 0 },
+          uMinEV: { value: -5.0 }, uMaxEV: { value: 17.0 }, uReset: { value: 1 }, uFixedExposure: { value: 0 }, uFixedExposureMix: { value: 1 },
         }, { name: 'exposure' }),
         bloomDown: new FullScreenPass(BLOOM_DOWN_FRAG, {
           uSrc: { value: null }, uInvSrc: { value: new THREE.Vector2() },
@@ -693,6 +696,7 @@ export class PostFX {
       .set('uSpeedUp', s.exposureSpeedUp).set('uSpeedDown', s.exposureSpeedDown)
       .set('uCompensation', s.exposureCompensation)
       .set('uFixedExposure', s.fixedExposure || 0)
+      .set('uFixedExposureMix', s.fixedExposureMix ?? 1)
       .set('uReset', this.reset ? 1 : 0);
     p.exposure.render(r, this.exposureRT.write);
     this.exposureRT.swap();

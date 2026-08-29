@@ -249,7 +249,7 @@ export class CinematicCamera {
     if (v) {
       // Inherit the current framing so handing control over is a continuation
       // rather than a cut.
-      const dir = _v.copy(this._smoothLook).sub(this.camera.position).normalize();
+      const dir = this.camera.getWorldDirection(_v);
       this.yaw = Math.atan2(-dir.x, -dir.z);
       this.pitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
       this._vel.set(0, 0, 0);
@@ -390,6 +390,7 @@ export class CinematicCamera {
       // triggering one, and the descent afterwards has to happen too or the
       // camera is left stranded in mid-air once the wave has gone.
       if (this.diveController) {
+        this.diveController.applyFlow?.(P,dt);
         this.diveController.constrain(P);
       } else {
       let floor = this.seaLevelFn(P.x, P.z) + this.eventFloorFn(P.x, P.z) + 1.6 + this.waveFloor;
@@ -448,6 +449,7 @@ export class CinematicCamera {
       // with where the user is looking.
       const aim = this.aimPoint(900);
       this._smoothLook.set(aim.x, this.seaLevelFn(aim.x, aim.z), aim.z);
+      if(this.diveController)this._smoothLook.copy(cam.position).addScaledVector(fwdCopy,40);
       this.focusTarget = THREE.MathUtils.clamp(aim.dist, 6, 20000);
       this.focusDistance += (this.focusTarget - this.focusDistance) * Math.min(1, dt * 2.2);
 
