@@ -81,6 +81,20 @@ export const U = {
 
   uExposure: { value: 1.0 },
   uEarthCurvature: { value: 1.0 },
+
+  // The submerged world reads the same clock, sunlight and weather as the ocean.
+  uWaterTint: { value: new THREE.Vector3(0.012, 0.20, 0.27) },
+  uExtinction: { value: new THREE.Vector3(0.049, 0.020, 0.016) },
+  uDiveLight: { value: 1 },
+  uDiveNight: { value: 0 },
+  uDiveDeep: { value: 0 },
+  uCurrent: { value: 0.3 },
+  uClarity: { value: 1 },
+  uBioStrength: { value: 1 },
+  uLamp: { value: 0 },
+  uDiveForward: { value: new THREE.Vector3(0, 0, -1) },
+  uReefShadow: { value: null },
+  uReefShadowMatrix: { value: new THREE.Matrix4() },
 };
 
 /**

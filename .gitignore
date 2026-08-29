@@ -3,6 +3,9 @@ node_modules/
 
 # build output
 dist/
+.netlify/
+.qa/
+.npm-cache/
 .vite/
 
 # test harness output — hundreds of megabytes of debug captures, traces and

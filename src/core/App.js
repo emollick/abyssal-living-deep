@@ -15,6 +15,7 @@ import { OCEAN_SAMPLE_GLSL } from '../ocean/OceanSampleGLSL.js';
 import { PostFX } from '../post/PostFX.js';
 import { CinematicCamera } from '../camera/CinematicCamera.js';
 import { GpuProfiler } from './GpuProfiler.js';
+import { UnderwaterWorld } from '../underwater/UnderwaterWorld.js';
 
 export class App {
   constructor(canvas, onProgress = () => {}) {
@@ -117,11 +118,16 @@ export class App {
     this._resize(true);
     window.addEventListener('resize', () => this._resize());
 
+    this.onProgress('growing the underwater world', 0.90);
+    this.underwater = new UnderwaterWorld(this);
+
     this.onProgress('warming shaders', 0.94);
     this.ocean.update(1 / 60);
     this.atmosphere.update(this.camera, this.camera.position);
     this.sky.renderEnv();
-    renderer.compile(this.scene, this.camera);
+    // Surface shaders compile on the first surface visit. Compiling the full
+    // storm pipeline before a reef dive makes the first encounter needlessly slow.
+    renderer.compile(this.params.get('surface') === '1' ? this.scene : this.underwater.scene, this.camera);
 
     this.onProgress('ready', 1.0);
   }
@@ -197,6 +203,11 @@ export class App {
 
     const prof = this.profiler;
     this.cine.update(dt, this.time);
+    const submerged = this.camera.position.y < U.uSeaLevel.value - 0.12;
+    if (submerged !== this.submerged) {
+      this.submerged = submerged;
+      this.post.reset = true;
+    }
     prof.begin('oceanFFT');
     this.ocean.update(scaled);
     prof.end('oceanFFT');
@@ -206,8 +217,8 @@ export class App {
     this.atmosphere.syncUniforms(U);
     U.uAmbientColor.value.set(this.atmosphere.ambientColor.r, this.atmosphere.ambientColor.g, this.atmosphere.ambientColor.b);
     this.sky.update(this.time);
-    this.lightning.update(scaled || dt * 1e-3, this.time, this.weather?.state);
-    this.waterspout.update(scaled || dt * 1e-3, this.weather?.state?.cloudBottom);
+    this.lightning.update(scaled, this.time, this.weather?.state);
+    this.waterspout.update(scaled, this.weather?.state?.cloudBottom);
     // Crests run to roughly Hs above the mean, so free flight uses that as its
     // floor and rides over the sea instead of being swallowed by it.
     this.cine.waveFloor = (this.ocean?.significantWaveHeight || 0) * 0.75;
@@ -235,9 +246,21 @@ export class App {
     updateFrameUniforms(this.camera, this._projNoJitter, dt, this.time, this.frame);
     this.afterUpdate?.(scaled, dt);
 
+    if (submerged) {
+      prof.begin('underwater');
+      this.underwater.update(this.time, this.camera);
+      const waterRT = this.underwater.render(this.camera, this.hdrRT);
+      prof.end('underwater');
+      prof.begin('post');
+      this.post.render(waterRT.textures[0], waterRT.textures[1], null);
+      prof.end('post');
+      prof.collect();
+      return;
+    }
+
     prof.begin('particles');
     this.rain.update(this.camera, U.uRain.value, this.hdrRT.height);
-    this.spray.update(scaled || dt, U.uSprayAmount.value);
+    this.spray.update(scaled, U.uSprayAmount.value);
     prof.end('particles');
 
     // clouds march against the unjittered matrices set just above

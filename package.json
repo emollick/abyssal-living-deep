@@ -1,17 +1,17 @@
 {
-  "name": "abyssal-ocean",
-  "version": "1.0.0",
+  "name": "abyssal-living-deep",
+  "version": "2.0.0",
   "type": "module",
-  "description": "ABYSSAL — a fully procedural cinematic ocean and extreme weather simulation running in the browser (Three.js / WebGL2 / GLSL3). No external assets: every wave, cloud, foam streak and lightning bolt is generated on the GPU at runtime.",
+  "description": "A seeded underwater world beneath ABYSSAL's procedural ocean: coral reefs, kelp forests, marine life, volumetric light and a bioluminescent deep, with live generation and weather dials.",
   "license": "MIT",
   "author": "Davi (Token-Gremlin) <https://github.com/Token-Gremlin>",
-  "homepage": "https://github.com/Token-Gremlin/natural-disasters#readme",
+  "homepage": "https://github.com/emollick/abyssal-living-deep#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Token-Gremlin/natural-disasters.git"
+    "url": "git+https://github.com/emollick/abyssal-living-deep.git"
   },
   "bugs": {
-    "url": "https://github.com/Token-Gremlin/natural-disasters/issues"
+    "url": "https://github.com/emollick/abyssal-living-deep/issues"
   },
   "keywords": [
     "threejs",
@@ -42,7 +42,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "test": "node tools/quality-sim.mjs",
+    "test": "node tools/quality-sim.mjs && node tools/underwater-sim.mjs",
     "smoke": "node tools/smoke.mjs"
   },
   "dependencies": {

@@ -46,7 +46,13 @@ function header(text) {
 export function installUI(app) {
   const panel = $('panel');
   const toggle = $('panelToggle');
-  toggle.addEventListener('click', () => panel.classList.toggle('open'));
+  const setPanel = (open) => {
+    panel.classList.toggle('open', open);
+    panel.inert = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+  };
+  setPanel(false);
+  toggle.addEventListener('click', () => setPanel(!panel.classList.contains('open')));
 
   // A clicked control keeps keyboard focus, and a focused control eats the keys
   // that fly the camera: space re-presses the last button instead of climbing,
@@ -55,7 +61,7 @@ export function installUI(app) {
   // pointer has left it.
   document.addEventListener('pointerup', (e) => {
     const c = e.target.closest?.('button, input');
-    if (c) c.blur();
+    if (c && (c.tagName === 'BUTTON' || !c.closest('#expedition'))) c.blur();
   });
 
   const d = app.director;
@@ -69,7 +75,7 @@ export function installUI(app) {
     sandbox.setActive(on);
     modeBtn.textContent = on ? 'CINEMATIC' : 'SANDBOX';
     modeBtn.classList.toggle('active', on);
-    if (on) panel.classList.remove('open');
+    if (on) setPanel(false);
   };
   modeBtn.addEventListener('click', () => setMode(!sandbox.active));
   app.setSandbox = setMode;
@@ -289,11 +295,12 @@ export function installUI(app) {
 
   // -------------------------------------------------------------- hotkeys
   window.addEventListener('keydown', (e) => {
+    if (app.expedition?.active) return;
     if (e.target.tagName === 'INPUT') return;
     switch (e.code) {
       case 'KeyH':
         document.getElementById('hud').classList.toggle('on');
-        panel.classList.remove('open');
+        setPanel(false);
         break;
       case 'KeyP':
         app.paused = !app.paused;
@@ -307,7 +314,7 @@ export function installUI(app) {
         break;
       case 'KeyL': d.lightningBurst(10); break;
       case 'KeyC': setMode(!sandbox.active); break;
-      case 'Tab': panel.classList.toggle('open'); e.preventDefault(); break;
+      case 'Tab': setPanel(!panel.classList.contains('open')); e.preventDefault(); break;
       default: break;
     }
   });

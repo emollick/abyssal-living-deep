@@ -2,16 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>ABYSSAL — Procedural Ocean &amp; Extreme Weather</title>
-<meta name="description" content="A fully procedural cinematic ocean and extreme weather simulation running in the browser. Multi-cascade FFT waves, volumetric clouds, hurricanes and tsunamis, with no external assets." />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ABYSSAL — The Living Deep</title>
+<meta name="description" content="Grow an ocean from a seed. Explore procedural coral reefs, kelp forests, whale crossings and bioluminescent depths, beneath a living ocean and extreme weather simulation." />
 <meta name="author" content="Token-Gremlin" />
 <meta name="theme-color" content="#061018" />
 <meta property="og:type" content="website" />
-<meta property="og:title" content="ABYSSAL — Procedural Ocean &amp; Extreme Weather" />
-<meta property="og:description" content="Multi-cascade FFT waves, volumetric clouds, hurricanes and tsunamis. Every pixel generated on the GPU at runtime — no textures, no meshes, no assets." />
-<meta property="og:image" content="https://raw.githubusercontent.com/Token-Gremlin/natural-disasters/main/docs/media/clear-sky.png" />
-<meta property="og:url" content="https://github.com/Token-Gremlin/natural-disasters" />
+<meta property="og:title" content="ABYSSAL — The Living Deep" />
+<meta property="og:description" content="An ocean of your making. Seeded coral reefs, kelp forests and a midnight garden, with procedural dials for the world, water, life and weather." />
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23061018'/%3E%3Cpath d='M0 20c4-4 8-4 12 0s8 4 12 0 8-4 8 0v12H0z' fill='%236fd6ff'/%3E%3C/svg%3E" />
 <style>
@@ -239,7 +237,8 @@
 </style>
 </head>
 <body>
-<canvas id="gl"></canvas>
+<canvas id="gl" aria-label="Interactive procedural ocean world"></canvas>
+<noscript>This procedural ocean needs JavaScript and a browser with WebGL2 enabled.</noscript>
 
 <div id="lbTop" class="letterbox"></div>
 <div id="lbBot" class="letterbox"></div>
@@ -276,11 +275,11 @@
 
 <div id="panel"></div>
 <button id="modeToggle">SANDBOX</button>
-<div id="panelToggle"><span></span></div>
+<button id="panelToggle" aria-label="Rendering settings" aria-expanded="false"><span></span></button>
 
 <div id="boot">
   <h1>ABYSSAL</h1>
-  <h2>PROCEDURAL OCEAN &amp; EXTREME WEATHER</h2>
+  <h2>THE LIVING DEEP</h2>
   <div id="bootbar"><i></i></div>
   <div id="bootmsg">initialising</div>
   <div id="booterr"></div>

@@ -107,7 +107,7 @@ export class CinematicCamera {
         this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
         return;
       }
-      if (!this._locked) this.requestPointerLock();
+      if (!this._locked && !this.diveController) this.requestPointerLock();
       this._dragging = true;
       try { dom.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     });
@@ -169,7 +169,12 @@ export class CinematicCamera {
       }
     }, { passive: false });
 
-    window.addEventListener('keydown', (e) => this.keys.add(e.code));
+    window.addEventListener('keydown', (e) => {
+      if (e.target?.matches?.('input,select,textarea') || document.querySelector('dialog[open]')) return;
+      if (e.target?.matches?.('button') && ['Space','Enter'].includes(e.code)) return;
+      this.keys.add(e.code);
+      if (this.free && ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+    });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
   }
@@ -337,6 +342,10 @@ export class CinematicCamera {
   update(dt, time) {
     const cam = this.camera;
     if (this.freeze) return;
+    if (this.diveController && !this.free) {
+      this.diveController.updateCamera(dt, time);
+      return;
+    }
 
     if (this.free) {
       // Adopt any position written from outside (teleports, dev tooling) so
@@ -380,6 +389,9 @@ export class CinematicCamera {
       // Ride the surface. Rising with a passing tsunami is the whole point of
       // triggering one, and the descent afterwards has to happen too or the
       // camera is left stranded in mid-air once the wave has gone.
+      if (this.diveController) {
+        this.diveController.constrain(P);
+      } else {
       let floor = this.seaLevelFn(P.x, P.z) + this.eventFloorFn(P.x, P.z) + 1.6 + this.waveFloor;
 
       const van = this._vantage;
@@ -420,6 +432,7 @@ export class CinematicCamera {
       if (P.y < this._floor) {
         P.y = this._floor;
         if (this._vel.y < 0) this._vel.y = 0;
+      }
       }
 
       const amp = this.shakeBoost * 0.5;

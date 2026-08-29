@@ -438,6 +438,7 @@ export class Sandbox {
 
     document.body.appendChild(root);
     this.root = root;
+    root.inert = true;
 
     window.addEventListener('keydown', (e) => {
       if (!this.active || e.target.tagName === 'INPUT') return;
@@ -469,6 +470,7 @@ export class Sandbox {
 
   setActive(on) {
     this.active = on;
+    this.root.inert = !on;
     this.root.classList.toggle('on', on);
     document.body.classList.toggle('sandbox', on);
     if (on) {
