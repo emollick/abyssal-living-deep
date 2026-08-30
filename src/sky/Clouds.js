@@ -522,7 +522,9 @@ vec4 marchClouds(vec3 ro, vec3 rd, float rayJitter, vec3 sunColor, out vec4 diag
     t += fine;
   }
 
-  diag.x = depthOut;
+  // The history target is half-float: more than 65 km would become infinity
+  // and poison the next frame's reprojection near the horizon.
+  diag.x = clamp(depthOut, -1.0, 64000.0);
   diag.y = gShapeR;
   diag.z = max(gBase, peakDensity);
   gSpent = float(spent);
@@ -531,10 +533,9 @@ vec4 marchClouds(vec3 ro, vec3 rd, float rayJitter, vec3 sunColor, out vec4 diag
 `;
 
 /**
- * Marches 1/16 of the low-resolution rays per frame. Each fragment stands for
- * one low-res pixel inside a 4x4 block, chosen by a Bayer-ordered offset that
- * cycles over 16 frames; the resolve pass scatters the result back and
- * reprojects the other 15/16.
+ * Marches one interleaved slice of the low-resolution rays. High quality uses
+ * four slices so nearby storm clouds keep up with a camera riding the waves;
+ * lower tiers retain sixteen slices to limit the cost.
  */
 const CLOUD_FRAG = /* glsl */ `
 precision highp float;
@@ -546,6 +547,7 @@ uniform mat4 uInvViewProj;
 uniform vec3 uCamPos;
 uniform vec2 uLowRes;
 uniform vec2 uSlotOffset;
+uniform int uInterleave;
 uniform float uFrame;
 // Temporary instrument: writes a march internal instead of radiance so the
 // buffer can be blitted and read. 0 = off.
@@ -565,7 +567,7 @@ layout(location = 0) out vec4 oColor;
 layout(location = 1) out vec4 oDepth;
 
 void main(){
-  vec2 lowPix = floor(gl_FragCoord.xy) * 4.0 + uSlotOffset + 0.5;
+  vec2 lowPix = floor(gl_FragCoord.xy) * float(uInterleave) + uSlotOffset + 0.5;
   vec2 uv = lowPix / uLowRes;
 
   vec2 ndc = uv * 2.0 - 1.0;
@@ -587,26 +589,10 @@ void main(){
   skyAmbient(viewPos, rd);
 
   vec4 diag;
-  // Jitter is a pure function of the low-res pixel, deliberately not of time.
-  // Each pixel is re-marched on the same phase of the 4x4 amortisation cycle,
-  // so a fixed offset means every refresh returns the same radiance and the
-  // history can be replaced outright instead of crawling toward it. A temporal
-  // offset would decorrelate successive refreshes, force a slow blend, and the
-  // slow blend is exactly what drags the image back to the marched resolution
-  // and prints its blocks the moment the camera moves.
-  //
-  // Bayer rather than a hash: the resolve filter averages a 4x4 neighbourhood,
-  // and an ordered pattern guarantees those sixteen pixels carry the sixteen
-  // distinct offsets exactly once. That is a stratified estimate of the ray
-  // integral; white noise would leave clumps and gaps in the offsets and so a
-  // visibly grainier average for the same number of samples.
-  // Bayer stratifies the offsets across the sixteen pixels of a block, but its
-  // period is exactly the period of the amortisation, so on its own every pixel
-  // would be re-marched with the same offset forever and its sampling error
-  // would freeze into a static 4x4 pattern that no amount of resolve filtering
-  // removes. Rotating by the golden ratio once per refresh cycle keeps the
-  // spatial stratification and lets the history average the error away instead.
-  float cycle = floor(uFrame * 0.0625);
+  // Bayer offsets stratify the ray samples spatially. Rotate them once per
+  // refresh cycle so the resolve can average independent estimates instead of
+  // preserving a fixed sampling pattern inside each interleaving cell.
+  float cycle = floor(uFrame / float(uInterleave * uInterleave));
   vec4 cl = marchClouds(uCamPos, rd, fract(bayer4(lowPix) + 0.6180339887 * cycle),
                         sunColor, diag);
 
@@ -629,7 +615,7 @@ void main(){
 `;
 
 /**
- * Scatters this frame's 1/16 slice back into the low-res buffer and fills the
+ * Scatters this frame's slice back into the low-res buffer and fills the
  * rest by reprojecting the previous frame along the cloud-shell depth.
  */
 const CLOUD_REPROJ_FRAG = /* glsl */ `
@@ -643,6 +629,7 @@ uniform mat4 uPrevViewProj;
 uniform mat4 uInvViewProj;
 uniform vec3 uCamPos;
 uniform vec2 uSlotOffset;
+uniform int uInterleave;
 uniform float uReset;
 uniform float uBlend;
 uniform float uShellMid;
@@ -652,17 +639,17 @@ layout(location = 1) out vec4 oDiag;
 
 void main(){
   ivec2 lp = ivec2(gl_FragCoord.xy);
-  ivec2 qp = lp >> 2;
+  ivec2 qp = lp / uInterleave;
   ivec2 slot = ivec2(uSlotOffset);
-  bool fresh = (lp.x & 3) == slot.x && (lp.y & 3) == slot.y;
+  bool fresh = (lp.x % uInterleave) == slot.x && (lp.y % uInterleave) == slot.y;
 
   vec4 cur = texelFetch(uQuarter, qp, 0);
   vec4 curDiag = texelFetch(uQuarterDiag, qp, 0);
 
   // Where there is no history to blend against, seed from a bilinear read of
   // the marched buffer rather than the nearest texel: point-sampling it hands
-  // every pixel of a 4x4 amortisation cell the same value, so the sky prints as
-  // hard rectangles until all sixteen slots have been revisited. Soft and
+  // every pixel of an amortisation cell the same value, so the sky prints as
+  // hard rectangles until all slots have been revisited. Soft and
   // low-resolution converges to sharp; blocky reads as broken.
   vec4 smooth_ = texture(uQuarter, vUv);
   vec4 smoothDiag = texture(uQuarterDiag, vUv);
@@ -675,7 +662,7 @@ void main(){
 
   // reproject using this pixel's own history depth; fall back to the shell mid
   float dist = texture(uHistoryDiag, vUv).x;
-  if (dist <= 0.0) dist = uShellMid;
+  if (!(dist > 0.0 && dist < 65000.0)) dist = uShellMid;
 
   vec2 ndc = vUv * 2.0 - 1.0;
   vec4 p0 = uInvViewProj * vec4(ndc, -1.0, 1.0); p0 /= p0.w;
@@ -723,20 +710,9 @@ void main(){
 /**
  * Upsample from the amortised low buffer to screen.
  *
- * The residual pattern in the low buffer has a period of exactly four texels:
- * the sixteen pixels of an amortisation block were marched on sixteen different
- * frames, so while the camera moves each carries a different reprojection error
- * and the block prints as a crosshatch. A four-texel box has a zero at exactly
- * that frequency and erases it — but four low-res texels are eight screen
- * pixels, so running that box unconditionally is why every cloud in the sky was
- * a blurred smudge with no silhouette at all.
- *
- * The block only prints while history is being dragged across the buffer. Hold
- * the camera still and every slot converges on the same ray, the low buffer
- * becomes exact, and there is nothing to hide. So the box fades in with camera
- * motion and the still frame gets a sharp cubic instead — which is the frame
- * anyone actually judges the sky on, and while swinging the camera the motion
- * blur covers what the box costs.
+ * Slots refreshed on different frames can leave a two- or four-texel pattern
+ * while the camera moves. A matching box filter removes that frequency. Fade
+ * it out again as the history settles so stationary clouds retain sharp edges.
  */
 const CLOUD_UPSAMPLE_FRAG = /* glsl */ `
 precision highp float;
@@ -744,6 +720,7 @@ uniform sampler2D uSrc;
 uniform vec2 uInvSrc;
 uniform vec2 uSrcRes;
 uniform float uSharpen;   // 0 = trust the low buffer, 1 = hide the block grid
+uniform int uInterleave;
 in vec2 vUv;
 layout(location = 0) out vec4 oColor;
 
@@ -772,16 +749,15 @@ void main(){
   vec4 c = bicubic(vUv);
   if (uSharpen > 0.002) {
     // Snap to the nearest texel corner first. A bilinear tap sitting exactly on
-    // a corner is the average of the four texels around it, so four such taps
-    // one texel out on each diagonal are an exact 4x4 box. Left unsnapped they
-    // land mid-texel, the box stops being a box, and the cancellation is only
-    // partial.
+    // a corner averages the four texels around it, making a 2x2 box. Four
+    // such taps one texel out on each diagonal instead make a 4x4 box.
     vec2 corner = (floor(vUv / uInvSrc - 0.5) + 1.0) * uInvSrc;
-    vec4 wide = texture(uSrc, corner + vec2(-1.0, -1.0) * uInvSrc)
+    vec4 wide = uInterleave == 2 ? texture(uSrc, corner) : (
+                texture(uSrc, corner + vec2(-1.0, -1.0) * uInvSrc)
               + texture(uSrc, corner + vec2( 1.0, -1.0) * uInvSrc)
               + texture(uSrc, corner + vec2(-1.0,  1.0) * uInvSrc)
-              + texture(uSrc, corner + vec2( 1.0,  1.0) * uInvSrc);
-    c = mix(c, wide * 0.25, uSharpen);
+              + texture(uSrc, corner + vec2( 1.0,  1.0) * uInvSrc)) * 0.25;
+    c = mix(c, wide, uSharpen);
   }
   c.a = clamp(c.a, 0.0, 1.0);
   oColor = max(c, vec4(0.0));
@@ -889,6 +865,7 @@ export class Clouds {
       uCamPos: U.uCamPos,
       uLowRes: { value: new THREE.Vector2(1, 1) },
       uSlotOffset: { value: new THREE.Vector2() },
+      uInterleave: { value: 4 },
       uFrame: U.uFrame,
       uDetailFade: { value: new THREE.Vector3(9000, 34000, 95000) },
       uCloudDebug: { value: 0 },
@@ -899,6 +876,7 @@ export class Clouds {
       uHistory: { value: null }, uHistoryDiag: { value: null },
       uPrevViewProj: U.uPrevViewProjNJ, uInvViewProj: U.uInvViewProjNJ,
       uCamPos: U.uCamPos, uSlotOffset: { value: new THREE.Vector2() },
+      uInterleave: { value: 4 },
       // A refreshed sample is one estimate of the ray integral, not the answer,
       // because the march offset now changes every cycle. Blending rather than
       // replacing is what turns those estimates into an average.
@@ -910,6 +888,7 @@ export class Clouds {
       uSrc: { value: null }, uInvSrc: { value: new THREE.Vector2() },
       uSrcRes: { value: new THREE.Vector2() },
       uSharpen: { value: 0.0 },
+      uInterleave: { value: 4 },
     }, { name: 'cloudUpsample' });
     this._blockHide = 0;
 
@@ -928,6 +907,9 @@ export class Clouds {
 
   setQuality(q) {
     this.scale = q.cloudScale;
+    this.interleave=q.cloudSteps>=96?2:4;
+    this.activeSlots=this.interleave===2?this.slots.filter(([x,y])=>x<2&&y<2):this.slots;
+    for(const pass of [this.marchPass,this.reprojPass,this.upsamplePass])pass.set('uInterleave',this.interleave);
     this.enabled = q.cloudEnabled;
     this.marchPass.uniforms.uSteps.value = q.cloudSteps;
     this.marchPass.uniforms.uLightSteps.value = q.cloudLightSteps;
@@ -961,7 +943,7 @@ export class Clouds {
 
     // linear filtered so the reprojection can also read it as a smooth
     // low-frequency estimate; the per-slot reads use texelFetch regardless
-    this.quarterRT = makeRT(lw / 4, lh / 4, {
+    this.quarterRT = makeRT(lw / this.interleave, lh / this.interleave, {
       type: THREE.HalfFloatType, count: 2, name: 'cloudQuarter',
       minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
     });
@@ -1013,7 +995,9 @@ export class Clouds {
     s.uCloudAspect.value = THREE.MathUtils.clamp(
       s.uCloudScaleM.value / (thickness * 4.4), 0.8, 1.7);
 
-    const slot = this.slots[this.frame % 16];
+    if(this.lastUpdateFrame!==undefined&&U.uFrame.value-this.lastUpdateFrame>2)this.reset=true;
+    this.lastUpdateFrame=U.uFrame.value;
+    const slot = this.activeSlots[this.frame % this.activeSlots.length];
     this.marchPass.uniforms.uSlotOffset.value.set(slot[0], slot[1]);
     this.reprojPass.uniforms.uSlotOffset.value.set(slot[0], slot[1]);
     this.frame++;
@@ -1034,9 +1018,12 @@ export class Clouds {
     // How hard the resolve has to work to hide the amortisation grid, which is
     // entirely a function of how far history is being dragged this frame.
     // Engage fast, because the block prints on the frame the camera starts
-    // moving; release slowly, because all sixteen slots have to be revisited
-    // before the buffer is trustworthy again and that takes a third of a second.
-    const shift = this._reprojectionShift(Math.max(mid, 500) * 6.0);
+    // moving; release slowly, because all slots have to be revisited before
+    // the buffer is trustworthy again.
+    // Near cloud bases have much more parallax than the distant shell centre.
+    // Measuring only that distant shell missed the vertical motion of a
+    // floating camera and left the interleaving grid visible in storm skies.
+    const shift = this._reprojectionShift(Math.max(300,s.uCloudBottom.value-U.uCamPos.value.y));
     const want = THREE.MathUtils.clamp((shift - 0.3) / 1.8, 0, 1);
     this._blockHide += (want - this._blockHide) * (want > this._blockHide ? 0.55 : 0.045);
 

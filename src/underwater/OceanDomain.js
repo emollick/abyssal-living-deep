@@ -5,8 +5,28 @@ export const SITE_ORIGINS = {
 };
 export const MAX_DEPTH = 1419;
 export const DOMAIN_RADIUS = 2200;
+export const SURFACE_EYE_HEIGHT = 1.55;
 export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+// A fresh visit begins on the sea. Explicit dive links retain their destination.
+export function initialView(params) {
+  if(params.get('surface')==='1')return {kind:'surface',clearance:SURFACE_EYE_HEIGHT};
+  if(params.get('surface')==='waterline')return {kind:'surface',clearance:.08};
+  const raw=params.get('depth');
+  if(raw!==null&&raw.trim()!==''&&Number.isFinite(Number(raw))){
+    const depth=clamp(Number(raw),0,MAX_DEPTH);
+    return depth>1?{kind:'depth',depth}:{kind:'surface',clearance:SURFACE_EYE_HEIGHT};
+  }
+  if(params.has('site')||params.get('surface')==='0')return {kind:'habitat'};
+  return {kind:'surface',clearance:SURFACE_EYE_HEIGHT};
+}
+
+export function floatEyeHeight(previous,surface,clearance,dt) {
+  if(dt<=0)return previous;
+  const y=previous+(surface+clearance-previous)*(1-Math.exp(-dt*12));
+  return clearance>.5?Math.max(surface+.65,y):y;
+}
 
 export function oceanFloor(x, z, recipe = {}) {
   const seed = recipe.worldSeed ?? recipe.seed ?? 713;
@@ -71,7 +91,7 @@ export function transectPose(depth, recipe = {}) {
 }
 
 export function depthZone(depth) {
-  if (depth < -0.4) return {id:'surface',name:'The breathing sea',label:'AIR / OCEAN',subtitle:'One ocean. From the sky to the abyss.'};
+  if (depth < 0.4) return {id:'surface',name:'The breathing sea',label:depth>-8?'AT SEA LEVEL':'AIR / OCEAN',subtitle:'Drift with the waves, or dive into the world below.'};
   if (depth < 80) return {id:'sunlight',name:'The sunlit sea',label:'SUNLIGHT / 0–200 M',subtitle:'Light, waves and life, sharing the same water.'};
   if (depth < 200) return {id:'blue',name:'The edge of daylight',label:'THE CONTINENTAL SLOPE',subtitle:'The shelf falls away. The blue grows deeper.'};
   if (depth < 1000) return {id:'twilight',name:'The long twilight',label:'TWILIGHT / 200–1,000 M',subtitle:'The last blue light. A slow rain from the world above.'};

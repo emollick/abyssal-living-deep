@@ -1,10 +1,10 @@
 # ABYSSAL — The Living Deep
 
-A procedural expansion of [ABYSSAL by Token-Gremlin](https://github.com/Token-Gremlin/natural-disasters). Grow one connected ocean from a seed: a sunlit reef, a kelp forest, the continental slope and a 1,400-metre trench. Swim through the waves into the sky, or follow the canyon into the dark.
+A procedural expansion of [ABYSSAL by Token-Gremlin](https://github.com/Token-Gremlin/natural-disasters). Begin at sea level, floating with the waves. Dive into a sunlit reef, a kelp forest, the continental slope and a 1,400-metre trench, all grown together from one seed. Swim through the waterline into the sky, or follow the canyon into the dark.
 
 [**Explore the living deep**](https://abyssal-living-deep.netlify.app/)
 
-![A generated coral reef](docs/media/living-reef.jpg)
+![The sea-level opening, with a direct route into the reef](docs/media/living-surface.jpg)
 
 ## One ocean, four habitats
 
@@ -15,9 +15,13 @@ A procedural expansion of [ABYSSAL by Token-Gremlin](https://github.com/Token-Gr
 | Into the blue | A continental drop-off, stone pinnacles, a passing humpback whale, dolphins, tuna, ocean sunfish and jetting squid. |
 | The midnight garden | Mineral chimneys, vent plumes and tube worms; anglerfish, gulper eels and flapjack octopuses above isopods, brittle stars, sea cucumbers and vent shrimp. |
 
-All four habitats exist together in one generated landscape. The site buttons travel between them; they do not replace the scene or reset the weather. **Ascend** rises vertically to the surface. **Descend** follows the canyon from the shelf, or dives directly when you are already over the trench. Choose a depth stop, interrupt a journey with **Stop here**, or swim freely with **Q / E** to descend and ascend.
+All four habitats exist together in one generated landscape. **Dive into the reef** begins the first descent from the opening view. The site buttons travel between habitats; they do not replace the scene or reset the weather. **Ascend** returns to a floating view at sea level. **Descend** follows the canyon from the shelf, or dives directly when you are already over the trench. Choose a depth stop, interrupt a journey with **Stop here**, or swim freely with **Q / E** to descend and ascend.
 
-**World lab** changes the whole ocean. Numeric and text seeds are reproducible; **New seed** grows another landscape. **Copy world link** includes the seed, starting habitat or depth, procedural dials, weather settings and any explicit quality choice.
+**World lab** has four control tabs: **World** for seeds, terrain and living cover; **Life** for animal populations; **Water** for visibility, currents, dive lighting and upwelling; and **Weather** for sky, wind, waves and ocean events. It opens to Weather at sea level and keeps the selected tab during your visit. Arrow keys move between tabs; Escape closes the lab.
+
+Numeric and text seeds are reproducible; **New seed** grows another landscape. **Reset recipe** restores the seed, world, weather and automatic dive-light defaults. **Copy world link** includes the seed, starting view, procedural dials, weather settings, dive-light override and any explicit quality choice. **View & controls**, beneath each tab, contains the waterline view, rendering quality and help.
+
+![Generated coral colonies rooted in irregular limestone shelves](docs/media/living-reef.jpg)
 
 | The sunken forest | Into the blue |
 | --- | --- |
@@ -43,12 +47,13 @@ The 25 added creature types have generated anatomy, seeded proportions and marki
 - **Water clarity** changes wavelength-dependent extinction and visibility.
 - **Current strength** controls water advection, swimming drift, kelp and particles. Surface weather and disaster currents weaken with depth.
 - **Bioluminescence** controls living light, especially at night and in the deep.
+- **Dive light** switches between automatic depth-based lighting, on and off. The toolbar light button provides a quick manual override.
 - **Deep upwelling** changes the vent plumes and upward flow. Its nutrients gradually feed a surface bloom, which glows when waves disturb it at night.
 - **Sun elevation, cloud cover, wind, swell and storm intensity** drive shared weather. Expand **More weather dials** for direction, swell period, choppiness, amplitude, rain, haze and cloud density. Day, dusk, storm and night provide starting conditions.
 
 **Trigger a seafloor tremor** stirs sediment around the deep vents and sends an expanding wave train across the surface. The event continues while you ascend, descend or visit another habitat. The original rogue waves, whirlpools, tsunamis, lightning, waterspouts and hurricanes are available in the same lab.
 
-Geometry dials rebuild on release. Water and weather dials respond while dragging. Use the arrow keys for small changes and Home/End for the limits.
+Geometry dials rebuild on release. Population dials replace the animal communities without regrowing the scenery. Water and weather dials respond while dragging. Use the arrow keys for small changes and Home/End for the limits.
 
 ## Explore
 
@@ -61,13 +66,13 @@ Geometry dials rebuild on release. Water and weather dials respond while draggin
 | **Drag** | Look around |
 | **Q / E** | Down / up |
 | **Shift** | Swim faster |
-| **Mouse wheel** | Zoom |
+| **Mouse wheel** | Zoom in Swim mode |
 | **1–4** | Travel to a habitat in the same ocean |
 | **G / R** | Open world lab / generate a new seed |
 | **F / P / H** | Toggle swimming / pause simulation / hide controls |
 | **L** | Override the automatic deep-water light |
 | **Camera button** | Save a PNG without the interface |
-| **Float at the waterline** | Follow the actual waves at the boundary between air and water; in World lab → View |
+| **Float at the waterline** | Follow the actual waves at the boundary between air and water; in World lab → View & controls |
 
 Touch layouts provide hold-to-swim buttons and drag-to-look. Desktop graphics are recommended. The scene requires WebGL2 and floating-point render targets; automatic quality scaling and lower presets help slower devices. Phone hardware performance is not guaranteed.
 
@@ -106,16 +111,19 @@ Deploy `dist/` to any static host. `netlify.toml` contains the Netlify build set
 
 ```text
 ?site=reef&seed=713
+?seed=713
 ?site=kelp&seed=5819&life=1.3&height=1.2&current=1.5
 ?site=deep&seed=82017&glow=1.5
 ?site=reef&seed=713&depth=200
 ?site=reef&seed=713&depth=600&predators=1.4&jellies=0
 ?site=deep&seed=713&benthos=1.5&shoal=1.2
 ?site=deep&seed=713&surface=1&light=night&upwelling=3
+?site=reef&seed=713&surface=waterline
+?site=deep&seed=713&lamp=off
 ?site=reef&seed=713&light=storm&preset=high&adaptive=0
 ```
 
-Supported sites: `reef`, `kelp`, `blue`, `deep`. The default world seed is 713 for every starting site. Numeric recipes are clamped to the supported dial ranges. Text seeds become a stable 32-bit seed. `surface=1` starts above water; `depth=200` starts at a point on the canyon route. The original quality and profiling parameters continue to work; see the [upstream documentation](docs/UPSTREAM.md).
+Supported sites: `reef`, `kelp`, `blue`, `deep`. A fresh visit, including a seed-only link, starts floating at sea level. An explicit `site` link starts inside that habitat; `surface=1` instead starts at sea level above it, and `surface=waterline` puts the lens at the air/water boundary. `depth=200` starts on the canyon route. The default world seed is 713. Numeric recipes are clamped to the supported dial ranges, and text seeds become a stable 32-bit seed. The original quality and profiling parameters continue to work; see the [upstream documentation](docs/UPSTREAM.md).
 
 ## Code
 
@@ -124,7 +132,7 @@ The existing rendering pipeline remains in `src/core`, `src/ocean`, `src/sky`, `
 | File | Purpose |
 | --- | --- |
 | `WorldMath.js` | Seeded randomness, recipes, floor field, current attenuation and swimming bounds |
-| `OceanDomain.js` | Continuous bathymetry, habitat placement, depth stops and safe routes |
+| `OceanDomain.js` | Continuous bathymetry, initial view, floating eye height, habitat placement, depth stops and safe routes |
 | `OceanDynamics.js` | Depth-dependent currents, upwelling, nutrient transport and seafloor pulses |
 | `OceanTerrain.js` | Continuous shelf and canyon, wall colonies and midwater life |
 | `WaterInterface.js` | Actual-wave probe and continuous air/water compositing |
@@ -136,7 +144,7 @@ The existing rendering pipeline remains in `src/core`, `src/ocean`, `src/sky`, `
 | `UnderwaterWorld.js` | World generation, light shafts, shadows, particles and render integration |
 | `Expedition.js` | World lab, sharing, exploration controls and habitat selection |
 
-Logic tests cover all habitat-to-habitat routes across multiple seeds and terrain settings, agreement between rendered terrain and collision height, pause invariants, and effects in both directions. Fauna checks cover distinct anatomy, finite geometry, repeatable seeds, population controls, encounters along the route, seafloor clearance and continuous motion. They do not replace visual testing. Inspect all habitats and depth communities, complete ascent/descent journeys, the waterline, and clear/dusk/storm/night conditions. Keep the source free of external art assets.
+Logic tests cover the sea-level entry, explicit dive links, floating-camera behavior, coral attachment, all habitat-to-habitat routes across multiple seeds and terrain settings, agreement between rendered terrain and collision height, pause invariants, and effects in both directions. Fauna checks cover distinct anatomy, finite geometry, repeatable seeds, population controls, encounters inside the actual view at depth stops, seafloor clearance and continuous motion. They do not replace visual testing. Inspect all habitats and depth communities, complete ascent/descent journeys, the waterline, and clear/dusk/storm/night conditions. Keep the source free of external art assets.
 
 ## Credits and license
 

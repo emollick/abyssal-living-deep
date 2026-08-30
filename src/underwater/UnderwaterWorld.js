@@ -110,7 +110,7 @@ void main(){
 
 function disposeTree(root) {
   const geometries=new Set(), materials=new Set();
-  root.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);});
+  root.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);if(o.isInstancedMesh)o.dispose();});
   geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());
 }
 
@@ -137,21 +137,42 @@ export class UnderwaterWorld {
 
   generate(id, seed, input = this.settings) {
     const settings=normalizeGenerator(input);seed=parseSeed(seed,713);
-    const recipe={...settings,seed,worldSeed:seed},root=new THREE.Group(),sites=new Map();
-    root.name='One connected ocean';root.add(createOceanTerrain(recipe));
-    for(const base of HABITATS) {
-      const habitat=connectedHabitat(base,seed,settings),next=createHabitatGeometry(habitat),life=new MarineLife(habitat);
-      next.group.position.set(habitat.origin[0],0,habitat.origin[1]);next.group.add(life.group);root.add(next.group);
-      if(next.ventPositions.length){
-        const vents=next.ventPositions.map(v=>[v[0]+habitat.origin[0],v[1],v[2]+habitat.origin[1]]);
-        root.add(this.makeParticles(habitat,vents,true));
+    const recipe={...settings,seed,worldSeed:seed},sites=new Map();
+    // Population controls do not change the rocks or plants. Keep their meshes
+    // and only replace animal populations when the terrain recipe is unchanged.
+    const reuseScenery=this.root&&seed===this.seed&&['relief','life','height'].every(key=>settings[key]===this.recipe[key]);
+    const root=reuseScenery?this.root:new THREE.Group(),staged=[];
+    let snow,pelagic,fauna;
+    try {
+      if(!reuseScenery){root.name='One connected ocean';root.add(createOceanTerrain(recipe));}
+      for(const base of HABITATS) {
+        const habitat=connectedHabitat(base,seed,settings);
+        const next=reuseScenery?{group:this.sites.get(base.id).group,ventPositions:[]}:createHabitatGeometry(habitat);
+        if(!reuseScenery){next.group.position.set(habitat.origin[0],0,habitat.origin[1]);root.add(next.group);}
+        const life=new MarineLife(habitat);
+        if(reuseScenery)staged.push(life.group);else next.group.add(life.group);
+        if(next.ventPositions.length){
+          const vents=next.ventPositions.map(v=>[v[0]+habitat.origin[0],v[1],v[2]+habitat.origin[1]]);
+          root.add(this.makeParticles(habitat,vents,true));
+        }
+        sites.set(base.id,{habitat,group:next.group,life});
       }
-      sites.set(base.id,{habitat,group:next.group,life});
+      snow=reuseScenery?this.snow:this.makeParticles(recipe,[],false);
+      if(!reuseScenery)root.add(snow);
+      pelagic=createPelagicLife(recipe);staged.push(pelagic.group);
+      fauna=new OceanFauna(recipe);staged.push(fauna.group);
+    } catch(error) {
+      staged.forEach(disposeTree);if(!reuseScenery)disposeTree(root);
+      throw error;
     }
-    const snow=this.makeParticles(recipe,[],false);root.add(snow);
-    const pelagic=createPelagicLife(recipe);root.add(pelagic.group);
-    const fauna=new OceanFauna(recipe);root.add(fauna.group);
-    if(this.root){this.scene.remove(this.root);disposeTree(this.root);}
+    if(reuseScenery){
+      for(const [siteId,site] of sites){const old=this.sites.get(siteId).life.group;site.group.remove(old);disposeTree(old);site.group.add(site.life.group);}
+      for(const old of [this.pelagic.group,this.fauna.group]){root.remove(old);disposeTree(old);}
+    }else if(this.root){
+      this.scene.remove(this.root);disposeTree(this.root);
+    }
+    root.add(pelagic.group,fauna.group);
+    this.app.renderer.renderLists.dispose();
     this.root=root;this.scene.add(root);this.sites=sites;this.snow=snow;this.pelagic=pelagic;this.fauna=fauna;
     this.shadowDirty=true;
     this.settings=settings;this.seed=seed;this.recipe=recipe;this.habitat=sites.get(id)?.habitat||sites.get('reef').habitat;this.generation++;

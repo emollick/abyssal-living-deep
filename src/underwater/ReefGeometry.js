@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seeded, floorHeight, TAU } from './WorldMath.js';
 import { waterMaterial } from './UnderwaterMaterial.js';
 
@@ -22,22 +21,60 @@ export function paintGeometry(geometry, color = '#ffffff', rng = () => 0.5, flex
   return geometry;
 }
 
+// Stream scenery into small indexed meshes. A single reef-wide merge used a
+// large temporary JavaScript index array as well as two copies of every vertex,
+// which could exhaust a browser's memory on a second generation.
+export const SCENERY_BATCH_VERTICES = 65535;
+
+function mergeParts(parts) {
+  if (parts.length === 1) return parts[0];
+  const vertexCount=parts.reduce((n,g)=>n+g.attributes.position.count,0);
+  const indexCount=parts.reduce((n,g)=>n+g.index.count,0);
+  const merged=new THREE.BufferGeometry();
+  for(const [name,source] of Object.entries(parts[0].attributes)) {
+    const array=new source.array.constructor(vertexCount*source.itemSize);
+    let offset=0;
+    for(const part of parts){const a=part.attributes[name].array;array.set(a,offset);offset+=a.length;}
+    const attribute=new THREE.BufferAttribute(array,source.itemSize,source.normalized);
+    attribute.gpuType=source.gpuType;merged.setAttribute(name,attribute);
+  }
+  const indices=vertexCount<=SCENERY_BATCH_VERTICES?new Uint16Array(indexCount):new Uint32Array(indexCount);
+  let cursor=0,base=0;
+  for(const part of parts){
+    for(const index of part.index.array)indices[cursor++]=index+base;
+    base+=part.attributes.position.count;part.dispose();
+  }
+  merged.setIndex(new THREE.BufferAttribute(indices,1));
+  return merged;
+}
+
 export class Batch {
-  constructor(material) { this.material = material; this.parts = []; }
+  constructor(material) { this.material = material; this.parts = []; this.chunks=[]; this.vertices=0; }
   add(g, color, rng, flex = null) {
+    const count=g.attributes.position.count;
+    if(this.vertices&&this.vertices+count>SCENERY_BATCH_VERTICES)this.flush();
     paintGeometry(g, color, rng, flex);
     // Preserve shared vertices: dense coral used three times the GPU memory
     // when every branch was expanded into independent triangles.
-    if(!g.index)g.setIndex(Array.from({length:g.attributes.position.count},(_,i)=>i));
-    this.parts.push(g);
+    if(!g.index){
+      const indices=count<=SCENERY_BATCH_VERTICES?new Uint16Array(count):new Uint32Array(count);
+      for(let i=0;i<count;i++)indices[i]=i;
+      g.setIndex(new THREE.BufferAttribute(indices,1));
+    }
+    this.parts.push(g);this.vertices+=count;
+  }
+  flush() {
+    if(!this.parts.length)return;
+    this.chunks.push(mergeParts(this.parts));this.parts=[];this.vertices=0;
   }
   finish(group, name) {
-    if (!this.parts.length) return null;
-    const geometry = mergeGeometries(this.parts, false);
-    this.parts.forEach(g => g.dispose()); this.parts = [];
-    geometry.computeBoundingSphere();
-    const mesh = new THREE.Mesh(geometry, this.material); mesh.name = name;
-    group.add(mesh); return mesh;
+    this.flush();let first=null;
+    for(const [i,geometry] of this.chunks.entries()){
+      geometry.computeBoundingSphere();
+      const mesh=new THREE.Mesh(geometry,this.material);mesh.name=i?`${name} ${i+1}`:name;
+      group.add(mesh);first??=mesh;
+    }
+    this.chunks=[];return first;
   }
 }
 
@@ -67,6 +104,22 @@ export function rockGeometry(seed = 1) {
   g.computeVertexNormals(); return g;
 }
 
+// Anchor colonies to the deformed rock, not to its idealized ellipsoid. The
+// latter leaves small corals hovering over depressions or buried in ridges.
+export function highestSurfaceAt(geometry,x,z,fallback=0) {
+  const p=geometry.attributes.position,index=geometry.index;
+  const count=index?index.count:p.count;let highest=-Infinity;
+  for(let i=0;i<count;i+=3){
+    const a=index?index.getX(i):i,b=index?index.getX(i+1):i+1,c=index?index.getX(i+2):i+2;
+    const ax=p.getX(a),az=p.getZ(a),bx=p.getX(b)-ax,bz=p.getZ(b)-az,cx=p.getX(c)-ax,cz=p.getZ(c)-az;
+    const det=bx*cz-cx*bz;if(Math.abs(det)<1e-9)continue;
+    const dx=x-ax,dz=z-az,u=(dx*cz-cx*dz)/det,v=(bx*dz-dx*bz)/det;
+    if(u<-.00001||v<-.00001||u+v>1.00001)continue;
+    const ay=p.getY(a);highest=Math.max(highest,ay+u*(p.getY(b)-ay)+v*(p.getY(c)-ay));
+  }
+  return Number.isFinite(highest)?Math.max(fallback,highest):fallback;
+}
+
 function addTerrain(group, habitat, rng) {
   const g = new THREE.PlaneGeometry(360, 360, 168, 168); g.rotateX(-Math.PI / 2);
   const p = g.attributes.position, col = new Float32Array(p.count * 3);
@@ -94,7 +147,7 @@ function branchCoral(batch,x,y,z,size,color,rng,fan=false) {
   if(!coralForms.has(key)){
     const draft=new Batch(null);
     growBranchCoral(draft,0,0,0,1,'#ffffff',seeded(18031+variant*571+(fan?9311:0)),fan);
-    const form=mergeGeometries(draft.parts,false);draft.parts.forEach(g=>g.dispose());
+    draft.flush();const form=mergeParts(draft.chunks);
     coralForms.set(key,form);
   }
   const form=coralForms.get(key),g=form.clone(),width=size*(.86+rng()*.28);
@@ -217,10 +270,11 @@ export function createHabitatGeometry(habitat) {
   if (habitat.id === 'reef') {
     for(let i=0;i<12;i++){
       const x=(i%2?1:-1)*(16+rng()*8),z=-9-Math.floor(i/2)*11,s=6+rng()*5,high=2.5+rng()*3.8;
-      rocks.add(transform(rockGeometry(habitat.seed+i*97),[x,floorHeight(x,z,habitat)-high*.30,z],[s,high,s*.7],[0,rng()*TAU,.1]),'#949580',rng);
+      const shelf=transform(rockGeometry(habitat.seed+i*97),[x,floorHeight(x,z,habitat)-high*.30,z],[s,high,s*.7],[0,rng()*TAU,.1]);
+      rocks.add(shelf,'#949580',rng);
       for(let j=0;j<Math.round(9*density);j++){
         const a=rng()*TAU,r=Math.sqrt(rng())*.70,px=x+Math.cos(a)*r*s,pz=z+Math.sin(a)*r*s*.7;
-        const py=floorHeight(x,z,habitat)-high*.30+high*Math.sqrt(1-r*r)-.35;
+        const py=highestSurfaceAt(shelf,px,pz,floorHeight(px,pz,habitat))-.012;
         const size=.6+rng()*1.3;
         if(j%5===0)brains.add(transform(rockGeometry(j+i),[px,py+size*.23,pz],[size,size*.5,size*.88]),'#b9b18a',rng);
         else branchCoral(corals,px,py,pz,size,palette[j%palette.length],rng,j%4===0);
@@ -233,17 +287,18 @@ export function createHabitatGeometry(habitat) {
     }
     for(const [cx,cz,s] of [[-10,8,4.7],[13,6,5.7],[-18,-12,4.0],[20,-10,5],[-7,19,2.6],[9,20,2.8]]) {
       const y=floorHeight(cx,cz,habitat)+0.15;
-      rocks.add(transform(rockGeometry(cx+cz),[cx,y,cz],[s,s*0.44,s*0.80]),'#9ca489',rng);
+      const shelf=transform(rockGeometry(cx+cz),[cx,y,cz],[s,s*.44,s*.80]);rocks.add(shelf,'#9ca489',rng);
       for(let j=0;j<Math.round(18*density);j++) {
         const a=rng()*TAU,r=Math.sqrt(rng())*0.88;
         const x=cx+Math.cos(a)*r*s,z=cz+Math.sin(a)*r*s*0.8;
-        const base=y+s*0.44*Math.sqrt(1-r*r)-0.12;
+        const base=highestSurfaceAt(shelf,x,z,floorHeight(x,z,habitat))-.012;
         const color=palette[j%palette.length];
         if(j%4===0) {
           const size=.35+rng()*.80;
           brains.add(transform(rockGeometry(j),[x,base+size*.30,z],[size,size*.65,size*.88]),'#b9b18a',rng);
         }else if(j%4===1) {
           const size=.30+rng()*.85;
+          corals.add(segment(new THREE.Vector3(x,base,z),new THREE.Vector3(x,base+.25,z),size*.10,size*.05,7),color,rng);
           for(let k=0;k<2;k++){const g=plateGeometry(size*(1-k*.21),rng()*5);g.rotateZ((rng()-.5)*.25);g.translate(x,base+.08+k*.15,z);corals.add(g,color,rng);}
         }else branchCoral(corals,x,base,z,1.1+rng()*1.8,color,rng,j%7===0);
       }
@@ -267,6 +322,7 @@ export function createHabitatGeometry(habitat) {
       else if (style < 0.70) {
         const layers = 2 + Math.floor(rng() * 3);
         for (let j = 0; j < layers; j++) {
+          batch.add(segment(new THREE.Vector3(x,y,z),new THREE.Vector3(x+j*.2,y+.4+j*size*.3,z),size*.10,size*.045,7),color,rng);
           const g = plateGeometry(size * (1 - j * 0.15), rng() * 5);
           g.translate(x + j * 0.2, y + 0.4 + j * size * 0.3, z);
           batch.add(g, color, rng);

@@ -2,13 +2,54 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import * as THREE from 'three';
 import { HABITATS, seeded, parseSeed, normalizeGenerator, floorHeight, currentAt, cameraPose, constrainSwimmer } from '../src/underwater/WorldMath.js';
-import { createHabitatGeometry } from '../src/underwater/ReefGeometry.js';
+import { createHabitatGeometry, highestSurfaceAt, Batch, SCENERY_BATCH_VERTICES } from '../src/underwater/ReefGeometry.js';
 import { MarineLife } from '../src/underwater/MarineLife.js';
 
 let checks=0;
 const check=(condition,message)=>{assert.ok(condition,message);checks++;};
 const digest=group=>{const hash=createHash('sha256');group.traverse(o=>{if(o.geometry)for(const a of Object.values(o.geometry.attributes))hash.update(Buffer.from(a.array.buffer,a.array.byteOffset,a.array.byteLength));});return hash.digest('hex');};
 const dispose=group=>group.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
+
+const anchorSurface=new THREE.BufferGeometry();
+anchorSurface.setAttribute('position',new THREE.Float32BufferAttribute([0,-3,0,2,-1,0,0,-3,2,0,2,0,2,4,0,0,2,2],3));
+check(Math.abs(highestSurfaceAt(anchorSurface,1,.5,-10)-3)<1e-6,'Coral anchors must use the upper rock surface, including a sloping ledge.');
+check(highestSurfaceAt(anchorSurface,4,4,-8)===-8,'Outside a rock, colonies must fall back to the seabed.');
+anchorSurface.setIndex([2,1,0]);
+check(Math.abs(highestSurfaceAt(anchorSurface,1,.5,-10)+2)<1e-6,'Indexed, reversed triangles below sea level must still give a correct attachment height.');
+anchorSurface.dispose();
+
+// Dense scenery must retain its exact vertices and triangle winding while
+// keeping each temporary merge and its indices within a small memory budget.
+const batch=new Batch(new THREE.MeshBasicMaterial()),originals=[];
+for(let i=0;i<12;i++){
+  const g=i===0?new THREE.BoxGeometry().toNonIndexed():new THREE.PlaneGeometry(7,5,128,64);
+  g.translate(i*8,i*.3,-i*2);batch.add(g,'#92aa71',seeded(i),(_x,y)=>y*.2);originals.push(g);
+}
+const batched=new THREE.Group();batch.finish(batched,'Dense scenery');
+check(batched.children.length>1,'Dense scenery must be split into bounded meshes.');
+check(batch.parts.length===0&&batch.chunks.length===0,'Finishing scenery must release temporary mesh references.');
+for(const mesh of batched.children){
+  check(mesh.geometry.attributes.position.count<=SCENERY_BATCH_VERTICES,'Scenery merges must stay within the vertex budget.');
+  check(mesh.geometry.index.array instanceof Uint16Array,'Bounded scenery should need only 16-bit indices.');
+  check(mesh.geometry.index.array.every(i=>i<mesh.geometry.attributes.position.count),'Every triangle must reference a vertex in its own batch.');
+}
+for(const name of Object.keys(originals[0].attributes)){
+  const before=createHash('sha256'),after=createHash('sha256');
+  originals.forEach(g=>before.update(Buffer.from(g.attributes[name].array.buffer)));
+  batched.children.forEach(m=>after.update(Buffer.from(m.geometry.attributes[name].array.buffer)));
+  check(before.digest('hex')===after.digest('hex'),`Batching must preserve every ${name} value without reducing detail.`);
+}
+const triangleHash=geometries=>{
+  const hash=createHash('sha256');
+  for(const g of geometries){
+    const expanded=new Float32Array(g.index.count*3),p=g.attributes.position;
+    for(let i=0;i<g.index.count;i++){const n=g.index.getX(i);expanded.set([p.getX(n),p.getY(n),p.getZ(n)],i*3);}
+    hash.update(Buffer.from(expanded.buffer));
+  }
+  return hash.digest('hex');
+};
+check(triangleHash(originals)===triangleHash(batched.children.map(m=>m.geometry)),'Streaming batches must preserve triangle order and winding.');
+dispose(batched);
 
 const r1=seeded(713),r2=seeded(713),r3=seeded(714);
 const stream=Array.from({length:500},()=>r1());

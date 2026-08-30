@@ -24,7 +24,12 @@ body.diving #sandbox, body.diving .letterbox { display: none !important; }
 .dive-caption p { font-size: 13px; line-height: 1.7; color: #d0e2d9; margin-top: 11px; letter-spacing: .015em; }
 .dive-fauna { margin-top: 12px; max-width: 570px; font: 10px/1.7 ui-monospace,Consolas,monospace; color: #c7d8bf; letter-spacing: .015em; text-shadow: 0 1px 6px #001019; }
 .dive-fauna:empty { display: none; }
-.dive-depth { position: absolute; top: 37%; right: 36px; text-align: right; font: 10px ui-monospace,Consolas,monospace; color: #d2e5dc; }
+.surface-entry { display: flex; gap: 9px; margin-top: 22px; }
+.surface-entry[hidden] { display: none; }
+#expedition .surface-entry button { min-height: 44px; padding: 11px 18px; border: 1px solid #d3e2b9; background: #d3e2b9; color: #102b2e; font-size: 12px; cursor: pointer; }
+#expedition .surface-entry button+button { color: #e5efdb; background: #06242ac4; border-color: #c6d9bc6b; }
+.at-surface .depth-stops { display: none; }
+.dive-depth { position: absolute; top: 37%; right: 36px; text-align: right; font: 10px ui-monospace,Consolas,monospace; color: #d2e5dc; text-shadow: 0 1px 3px #001219, 0 2px 10px #001219aa; }
 .dive-depth strong { font: 29px/1.3 Georgia,serif; letter-spacing: -.025em; font-weight: normal; color: #f1f0dd; }
 .dive-depth small { display: block; font-size: 9px; letter-spacing: .14em; margin-top: 5px; }
 .depth-rule { display: block; height: 95px; width: 18px; margin: 18px 0 0 auto; border-right: 1px solid #a8d4c568; background: repeating-linear-gradient(to bottom,transparent 0px,transparent 18px,#a8d4c588 18px,#a8d4c588 19px,transparent 19px,transparent 20px); background-size: 9px 100%; background-repeat: no-repeat; background-position: right; }
@@ -42,13 +47,23 @@ body.diving #sandbox, body.diving .letterbox { display: none !important; }
 .dive-keyhint kbd { font: inherit; color: #eff0d9; }
 .dive-status { position: absolute; top: 92px; left: 36px; font: 9px ui-monospace,Consolas,monospace; letter-spacing: .13em; color: #c1dbd5; }
 .dive-status b { display: inline-block; width: 5px; height: 5px; background: #dce9b9; border-radius: 100%; margin-right: 7px; vertical-align: 1px; }
-.dive-lab { position: absolute; width: 326px; top: 82px; right: 34px; bottom: 110px; background: rgba(3,24,30,.94); border: 1px solid #91b4a93c; border-top: 2px solid #d0e3b2; backdrop-filter: blur(20px); padding: 23px; overflow-y: auto; pointer-events: auto; scrollbar-width: thin; scrollbar-color: #65887c #0b252b; }
+.dive-lab { position: absolute; width: 364px; top: 82px; right: 34px; bottom: 110px; display: flex; flex-direction: column; background: rgba(3,24,30,.96); border: 1px solid #91b4a93c; border-top: 2px solid #d0e3b2; backdrop-filter: blur(20px); overflow: hidden; pointer-events: auto; }
 .dive-lab[hidden] { display: none; }
-.dive-lab h2 { font: normal 26px Georgia,serif; margin: 0 0 7px; }
-.dive-lab-intro { font-size: 11px; line-height: 1.7; color: #b8cec6; margin-bottom: 21px; }
+.dive-lab h2 { font: normal 25px Georgia,serif; margin: 0; }
+.lab-header { flex: 0 0 auto; padding: 16px 20px 0; }
+.lab-title-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#expedition #close-world-lab { width: 34px; height: 34px; border: 0; background: transparent; color: #c7dac8; font-size: 25px; cursor: pointer; }
+.dive-lab-intro { font-size: 11px; line-height: 1.7; color: #b8cec6; margin: 5px 0 15px; }
+.lab-tabs { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border-bottom: 1px solid #aecabd35; }
+#expedition .lab-tabs button { padding: 10px 2px; min-height: 42px; border: 0; border-bottom: 2px solid transparent; background: none; font-size: 11px; color: #adc8c1; cursor: pointer; }
+#expedition .lab-tabs button[aria-selected=true] { color: #edf2d9; border-bottom-color: #d2e5b9; background: #b7d1ae0c; }
+.lab-scroll { flex: 1 1 auto; min-height: 0; padding: 19px 20px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #65887c #0b252b; }
+.lab-panel[hidden] { display: none; }
+.lab-panel>h3:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+.lab-view { margin-top: 24px; }
 .dive-lab h3 { font: normal 9px ui-monospace,Consolas,monospace; color: #d5e4bb; letter-spacing: .18em; margin: 24px 0 15px; padding-top: 16px; border-top: 1px solid #aecabd2b; }
 .dive-seed-row { display: flex; gap: 8px; margin: 9px 0 10px; }
-.dive-lab label { font-size: 11px; color: #dce8de; }
+.dive-lab label { font-size: 12px; color: #dce8de; }
 .dive-lab input[type=text] { min-width: 0; width: 100%; background: #ffffff06; border: 1px solid #8caca050; color: #e3edd7; font: 12px ui-monospace,Consolas,monospace; padding: 10px; border-radius: 0; }
 #expedition .lab-button { background: #cadbb9; color: #122d2c; border: 1px solid #cadbb9; padding: 10px 13px; font-size: 11px; white-space: nowrap; }
 #expedition .lab-button:hover { background: #e0ecd1; }
@@ -58,16 +73,21 @@ body.diving #sandbox, body.diving .letterbox { display: none !important; }
 .dial { margin: 16px 0; }
 .dial-heading { display: flex; justify-content: space-between; align-items: center; }
 .dial output { font: 10px ui-monospace,Consolas,monospace; color: #bfd6c7; }
-.dive-lab .dial input[type=range] { width: 100%; height: 24px; cursor: pointer; display: block; margin-top: 3px; }
-.dive-lab .dial input[type=range]::-webkit-slider-runnable-track { background: #bdd5c34a; height: 2px; }
-.dive-lab .dial input[type=range]::-webkit-slider-thumb { background: #d9e6bc; width: 11px; height: 11px; box-shadow: none; margin-top: -4.5px; }
-.dive-lab select { width: 100%; padding: 9px; background: #0e2d32; color: #dbe9dc; margin-top: 8px; border: 1px solid #8caca050; font-size: 11px; }
+.dive-lab .dial input[type=range] { width: 100%; height: 28px; cursor: pointer; display: block; margin-top: 3px; touch-action: none; }
+.dive-lab .dial input[type=range]::-webkit-slider-runnable-track { background: #bdd5c34a; height: 3px; }
+.dive-lab .dial input[type=range]::-webkit-slider-thumb { background: #d9e6bc; width: 14px; height: 14px; box-shadow: none; margin-top: -5.5px; }
+.lab-control-label { font-size: 12px; color: #dce8de; margin-top: 18px; }
+.lab-choices { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; margin-top: 9px; }
+#expedition .lab-choices button { min-height: 40px; border: 1px solid #99b7a839; background: #ffffff04; color: #c5dbce; font-size: 11px; cursor: pointer; }
+#expedition .lab-choices button[aria-pressed=true] { color: #e8f0c9; border-color: #d6e6b9; background: #c1d7b21a; }
 .lab-weather { display: grid; grid-template-columns: repeat(4,1fr); gap: 3px; }
 #expedition .lab-weather button { background: #ffffff04; border: 1px solid #99b7a839; padding: 9px 0; font-size: 10px; }
 #expedition .lab-weather button[aria-pressed=true] { border-color: #d6e6b9; background: #c1d7b21a; color: #e8f0c9; }
 .lab-note { font-size: 10px; line-height: 1.7; color: #a9c1b7; margin-top: 13px; }
 .lab-stat { font: 9px/1.9 ui-monospace,Consolas,monospace; color: #aec9bb; }
-.lab-finish { border-top: 1px solid #aecabd2b; padding-top: 16px; margin-top: 22px; }
+.lab-finish { flex: 0 0 auto; display: flex; gap: 10px; align-items: center; justify-content: space-between; border-top: 1px solid #aecabd2b; padding: 11px 20px; }
+.lab-finish .lab-stat { font-size: 8px; margin: 0; }
+#expedition .lab-finish .lab-quiet { flex: 0 0 auto; padding: 8px; }
 .dive-help { width: min(530px,calc(100vw - 32px)); margin: auto; color: #e4eadb; background: #09242c; border: 1px solid #a0c4b664; padding: 35px; max-height: 85vh; overflow-y: auto; font: 13px/1.8 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
 .dive-help::backdrop { background: #000b10aa; backdrop-filter: blur(5px); }
 .dive-help h2 { font: 34px Georgia,serif; margin-bottom: 18px; }
@@ -139,7 +159,12 @@ body.lab-open .dive-depth { opacity: 0; }
   #expedition .depth-stops button { min-height: 42px; }
   .dive-keyhint { display: none; }
   .dive-transport { align-self: flex-start; }
-  .dive-lab { top: 74px; right: 12px; left: 12px; bottom: 153px; width: auto; padding: 22px; }
+  .dive-lab { top: 74px; right: 12px; left: 12px; bottom: 153px; width: auto; }
+  .lab-header { padding: 12px 15px 0; }
+  .lab-scroll { padding: 17px 15px; }
+  .lab-finish { padding: 10px 15px; }
+  .surface-entry { flex-wrap: wrap; gap: 7px; margin-top: 16px; }
+  #expedition .surface-entry button { padding: 11px 13px; font-size: 11px; }
   body.lab-open .dive-caption { opacity: 0; }
   .dive-toast { width: calc(100vw - 48px); text-align: center; bottom: 154px; }
   .dive-help { padding: 26px; }
@@ -156,5 +181,10 @@ body.lab-open .dive-depth { opacity: 0; }
 @media(max-width: 600px) and (max-height: 740px) {
   .dive-depth { top: 16%; }
   .dive-caption h1 { font-size: 30px; }
+}
+@media(max-width: 380px) {
+  #dive-surface span, #dive-descend span:last-child { display: none; }
+  #expedition .dive-actions .dive-action { min-width: 42px; }
+  #dive-lab-toggle span { white-space: nowrap; }
 }
 @media(prefers-reduced-motion:reduce) { #expedition *, #boot { transition: none !important; } }

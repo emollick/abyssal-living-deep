@@ -1,13 +1,28 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { HABITATS, floorHeight } from '../src/underwater/WorldMath.js';
-import { connectedHabitat, oceanFloor, constrainToOcean, transectPose, routeBetween, travelSpeed } from '../src/underwater/OceanDomain.js';
+import { connectedHabitat, oceanFloor, constrainToOcean, transectPose, routeBetween, travelSpeed, initialView, floatEyeHeight, SURFACE_EYE_HEIGHT, depthZone } from '../src/underwater/OceanDomain.js';
 import { OceanDynamics, DEEP_SOURCE, flowAt, pulseHeight } from '../src/underwater/OceanDynamics.js';
 import { createOceanTerrain, createPelagicLife } from '../src/underwater/OceanTerrain.js';
 
 let checks=0;
 function check(value,label){assert.ok(value,label);checks++;}
 function dispose(group){group.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});}
+
+for(const [query,kind] of [['','surface'],['seed=82017','surface'],['light=storm','surface'],['site=reef','habitat'],['site=deep','habitat'],['site=deep&surface=1','surface'],['surface=waterline','surface'],['surface=0','habitat'],['depth=0','surface'],['depth=600','depth'],['depth=NaN','surface'],['depth=','surface'],['depth=600&surface=1','surface']]){
+  check(initialView(new URLSearchParams(query)).kind===kind,'The initial view must honor a fresh surface visit and explicit dive links: '+query);
+}
+check(initialView(new URLSearchParams('surface=waterline')).clearance<.1,'A shared waterline view must retain the boundary camera.');
+check(initialView(new URLSearchParams()).clearance===SURFACE_EYE_HEIGHT&&SURFACE_EYE_HEIGHT<2,'Fresh visits begin at human eye height above the water.');
+check(depthZone(-SURFACE_EYE_HEIGHT).id==='surface','A near-water surface view must not be labeled as an underwater zone.');
+check(floatEyeHeight(1.5,4,SURFACE_EYE_HEIGHT,0)===1.5,'Pause must freeze the floating camera.');
+for(const fps of [15,30,60,120]){
+  let y=SURFACE_EYE_HEIGHT,clear=true;
+  for(let i=0;i<fps*20;i++){const height=Math.sin(i/fps*.8)*2.4;y=floatEyeHeight(y,height,SURFACE_EYE_HEIGHT,1/fps);clear&&=Number.isFinite(y)&&y>height+.6;}
+  check(clear,'The surface camera must stay in air while following moving waves at '+fps+' FPS.');
+  for(let i=0;i<fps*3;i++)y=floatEyeHeight(y,0,SURFACE_EYE_HEIGHT,1/fps);
+  check(Math.abs(y-SURFACE_EYE_HEIGHT)<.02,'The floating camera settles at the requested eye height.');
+}
 
 for(const seed of [0,713,1934512951,4294967295])for(const relief of [.2,1,2.2]) {
   const recipe={seed,relief};

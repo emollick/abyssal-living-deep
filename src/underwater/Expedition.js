@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { U } from '../core/SharedUniforms.js';
 import { CONDITIONS } from '../ui/Sandbox.js';
 import { HABITATS, GENERATOR_DEFAULTS, parseSeed } from './WorldMath.js';
-import { constrainToOcean, transectPose, routeBetween, travelSpeed, depthZone, smooth } from './OceanDomain.js';
+import { constrainToOcean, transectPose, routeBetween, travelSpeed, depthZone, smooth, initialView, floatEyeHeight, SURFACE_EYE_HEIGHT } from './OceanDomain.js';
 import './expedition.css';
 
 const icons = {
@@ -15,12 +15,13 @@ const icons = {
 };
 const icon = name => `<svg viewBox="0 0 20 20" aria-hidden="true">${icons[name] || ''}</svg>`;
 const $ = id => document.getElementById(id);
+const LAB_TABS=[['world','World'],['life','Life'],['water','Water'],['weather','Weather']];
 
 export class Expedition {
   constructor(app) {
     this.app=app;this.world=app.underwater;this.active=false;this.started=app.time;
     this.surfacePost={...app.post.settings};this.weatherMode='day';this.dials={};this.lastReadout=0;
-    this.lampMode='auto';this.travel=null;this.driftPose=null;this.lookTarget=new THREE.Vector3();this.viewQuaternion=new THREE.Quaternion();this.viewMatrix=new THREE.Matrix4();this.up=new THREE.Vector3(0,1,0);
+    this.lampMode=['on','off'].includes(app.params.get('lamp'))?app.params.get('lamp'):'auto';this.labTab='world';this.surfaceClearance=SURFACE_EYE_HEIGHT;this.travel=null;this.driftPose=null;this.lookTarget=new THREE.Vector3();this.viewQuaternion=new THREE.Quaternion();this.viewMatrix=new THREE.Matrix4();this.up=new THREE.Vector3(0,1,0);
     this.buildUI();this.bindKeys();
     const after=app.afterUpdate;
     app.afterUpdate=(scaled,dt)=>{after?.(scaled,dt);this.updateUI(scaled,dt);};
@@ -33,10 +34,12 @@ export class Expedition {
     }
     if(Object.keys(custom).length){app.weather.set(custom,true);this.weatherMode='custom';}
     this.enterDive();
-    if(app.params.has('depth')&&Number.isFinite(+app.params.get('depth'))){const pose=transectPose(+app.params.get('depth'),this.world.recipe);this.resetView(pose);}
-    if(app.params.get('surface')==='1'){const h=this.world.habitat;this.resetView({eye:[h.eye[0],9,h.eye[2]],look:[h.look[0],1,h.look[2]-100]});}
+    const entry=initialView(app.params);
+    if(entry.kind==='depth')this.resetView(transectPose(entry.depth,this.world.recipe));
+    if(entry.kind==='surface')this.startAtSurface(entry.clearance);
     if(app.params.get('lab')==='1')this.toggleLab(true);
-    if(app.params.get('still')==='1'||matchMedia('(prefers-reduced-motion: reduce)').matches)this.setSwim(true);
+    this.reducedMotion=app.params.get('still')==='1'||matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(this.reducedMotion&&!this.floatAtSurface)this.setSwim(true);
     this.syncDials();
     this.writeURL();
   }
@@ -56,7 +59,7 @@ export class Expedition {
       </header>
       <div class="dive-status"><b></b><span id="dive-status-text">LIVING WORLD · SEED 713</span></div>
       <div class="dive-journey" id="dive-journey" hidden><span id="journey-label"></span><button id="journey-stop">Stop here</button><progress id="journey-progress" max="1" value="0" aria-label="Journey progress"></progress></div>
-      <section class="dive-caption" aria-label="Current dive site"><div class="dive-eyebrow" id="dive-site-label">01 / THE SUNLIT ZONE</div><h1 id="dive-title">Coral cathedral</h1><p id="dive-subtitle">A world beneath the waves.</p><div class="dive-fauna" id="fauna-readout" aria-label="Nearby animal life"></div></section>
+      <section class="dive-caption" aria-label="Current dive site"><div class="dive-eyebrow" id="dive-site-label">AT SEA LEVEL</div><h1 id="dive-title">The breathing sea</h1><p id="dive-subtitle">Drift with the waves, or dive into the world below.</p><div class="dive-fauna" id="fauna-readout" aria-label="Nearby animal life"></div><div class="surface-entry" id="surface-entry" hidden><button id="begin-dive">Dive below</button><button id="surface-lab">Open world lab</button></div></section>
       <div class="dive-depth"><strong id="dive-depth-value">13.0</strong> m<small id="depth-reference">BELOW THE SURFACE</small><nav class="depth-stops" aria-label="Depth stops">${[[0,'Surface'],[200,'Twilight'],[600,'Lower twilight'],[1000,'Midnight'],['vent','Vent field']].map(([d,l])=>`<button data-depth="${d}" aria-label="Travel to ${d===0?'the surface':d==='vent'?'the vent field':`${d} metres`}"><i></i><span>${d===0?'0':d==='vent'?'≈1,400':d.toLocaleString()}<small>${l}</small></span></button>`).join('')}</nav></div>
       <footer class="dive-bottom">
         <nav class="dive-sites" aria-label="Dive sites">${HABITATS.map(h=>`<button class="dive-site" data-site="${h.id}" aria-label="Visit ${h.name}" aria-pressed="${h.id==='reef'}"><span class="site-number">${h.number}</span><span class="site-name">${h.short}</span></button>`).join('')}</nav>
@@ -69,19 +72,25 @@ export class Expedition {
         </div><span class="dive-keyhint" id="dive-keyhint">Choose <kbd>Swim</kbd> to explore · <kbd>G</kbd> world lab · <kbd>H</kbd> hide controls</span></div>
       </footer>
       <aside class="dive-lab" id="dive-lab" aria-label="Procedural world lab" hidden>
-        <h2>One living ocean.</h2><p class="dive-lab-intro">One seed grows the reef, the forest and the entire trench. Travel between them without leaving the water.</p>
+        <div class="lab-header"><div class="lab-title-row"><h2>World lab</h2><button id="close-world-lab" aria-label="Close world lab">×</button></div><p class="dive-lab-intro">Shape the ocean, its life, and its weather.</p><div class="lab-tabs" role="tablist" aria-label="World lab sections">${LAB_TABS.map(([id,label])=>`<button role="tab" id="lab-tab-${id}" data-lab-tab="${id}" aria-controls="lab-panel-${id}" aria-selected="${id==='world'}" tabindex="${id==='world'?0:-1}">${label}</button>`).join('')}</div></div>
+        <div class="lab-scroll" id="lab-scroll">
+        <section class="lab-panel" id="lab-panel-world" data-lab-panel="world" role="tabpanel" aria-labelledby="lab-tab-world">
         <label for="world-seed">World seed</label><div class="dive-seed-row"><input id="world-seed" type="text" value="713" maxlength="40" spellcheck="false" aria-label="World seed"><button id="grow-seed" class="lab-button">Generate</button></div>
         <div class="lab-button-row"><button id="new-seed" class="lab-quiet">↻ New seed</button><button id="share-world" class="lab-quiet">Copy world link</button></div>
         <h3>SHAPE & LIFE</h3><div id="generator-dials"></div>
+        <p class="lab-note">The same seed and dials grow the same reef, forest and trench. Geometry changes apply when you release a dial.</p></section>
+        <section class="lab-panel" id="lab-panel-life" data-lab-panel="life" role="tabpanel" aria-labelledby="lab-tab-life" hidden>
         <h3>ANIMAL COMMUNITIES</h3><div id="fauna-dials"></div><p class="lab-note">Animal abundance scales the whole population. Hunters, bottom dwellers and jellies shape its balance. Nearby animals are named beside the dive title.</p>
         <details class="lab-more"><summary>Life by depth</summary><p class="lab-note"><strong>Reef & forest</strong><br>Butterflyfish, parrotfish, sharks and seals; octopuses, crabs, sea stars and urchins on the bottom.</p><p class="lab-note"><strong>Open water</strong><br>Whales, dolphins, tuna, sunfish, rays and squid.</p><p class="lab-note"><strong>Twilight</strong><br>Lanternfish and hatchetfish give way to vampire squid, dragonfish and midwater shrimp.</p><p class="lab-note"><strong>Midnight & seafloor</strong><br>Anglerfish, gulper eels and flapjack octopuses above isopods, brittle stars, sea cucumbers, sea pens and vent shrimp.</p><p class="lab-note">Animal sizes are approximate. These habitats combine species from different oceans for exploration.</p></details>
-        <h3>THROUGH THE WATER</h3><div id="water-dials"></div>
+        </section><section class="lab-panel" id="lab-panel-water" data-lab-panel="water" role="tabpanel" aria-labelledby="lab-tab-water" hidden>
+        <h3>THROUGH THE WATER</h3><div id="water-dials"></div><div class="lab-control-label" id="light-mode-label">Dive light</div><div class="lab-choices" role="group" aria-labelledby="light-mode-label">${[['auto','Automatic'],['on','On'],['off','Off']].map(([id,label])=>`<button data-lamp="${id}" aria-label="${label} dive light" aria-pressed="${id==='auto'}">${label}</button>`).join('')}</div><p class="lab-note">Automatic light comes on as sunlight fades with depth.</p>
         <h3>FROM THE DEEP</h3><div id="deep-dials"></div><button id="seafloor-tremor" class="lab-button lab-wide">Trigger a seafloor tremor</button><p class="lab-note">Deep upwelling feeds a green surface bloom, luminous at night. A tremor stirs the bottom and sends a wave out across the sea.</p><p class="lab-stat" id="coupling-status"></p>
+        </section><section class="lab-panel" id="lab-panel-weather" data-lab-panel="weather" role="tabpanel" aria-labelledby="lab-tab-weather" hidden>
         <h3>WEATHER ABOVE</h3><div class="lab-weather">${[['day','Day'],['dusk','Dusk'],['storm','Storm'],['night','Night']].map(([id,label])=>`<button data-weather="${id}" aria-pressed="${id==='day'}">${label}</button>`).join('')}</div><div id="weather-dials"></div>
         <details class="lab-more"><summary>More weather dials</summary><div id="weather-more"></div></details>
         <p class="lab-note" id="weather-depth-note">Storms carry motion and suspended particles into the shallows. Their energy fades with depth; the deep continues on its own currents.</p><div class="lab-events" aria-label="Ocean events">${[['rogue','Rogue wave'],['whirlpool','Whirlpool'],['tsunami','Tsunami'],['lightning','Lightning'],['waterspout','Waterspout'],['hurricane','Hurricane']].map(([id,label])=>`<button data-event="${id}" class="lab-quiet">${label}</button>`).join('')}<button id="clear-ocean-events" class="lab-quiet">Clear events</button></div>
-        <h3>VIEW</h3><button id="float-waterline" class="lab-quiet lab-wide">Float at the waterline</button><label for="dive-quality" style="display:block;margin-top:18px">Rendering quality</label><select id="dive-quality"><option value="auto">Automatic</option><option value="high">High</option><option value="ultra">Ultra</option><option value="medium">Medium</option><option value="low">Low</option><option value="potato">Lightest</option></select>
-        <div class="lab-finish"><p class="lab-stat" id="world-stats"></p><p class="lab-stat" id="world-performance"></p><p class="lab-note">The same seed and dials reproduce the same world. Geometry dials rebuild when you release them.</p><div class="lab-button-row" style="margin-top:14px"><button class="lab-quiet" id="reset-world">Reset recipe</button><button class="lab-quiet" id="lab-help">Controls & credits</button></div></div>
+        </section><details class="lab-more lab-view"><summary>View & controls</summary><button id="return-sea-level" class="lab-quiet lab-wide">Return to sea level</button><button id="float-waterline" class="lab-quiet lab-wide">Float at the waterline</button><div class="lab-control-label" id="quality-label">Rendering quality</div><div class="lab-choices" role="group" aria-labelledby="quality-label">${[['auto','Automatic'],['ultra','Ultra'],['high','High'],['medium','Medium'],['low','Low'],['potato','Lightest']].map(([id,label])=>`<button data-quality="${id}" aria-label="${label} rendering quality" aria-pressed="false">${label}</button>`).join('')}</div><p class="lab-note">WASD to swim · Drag to look · Q / E down / up · G opens the lab.</p><button class="lab-quiet lab-wide" id="lab-help">Controls & credits</button></details></div>
+        <div class="lab-finish"><div><p class="lab-stat" id="world-stats"></p><p class="lab-stat" id="world-performance"></p></div><button class="lab-quiet" id="reset-world">Reset recipe</button></div>
       </aside>
       <div class="dive-mobile" aria-label="Swimming controls"><button data-move="KeyW" aria-label="Swim forward">↑</button><button data-move="KeyE" aria-label="Swim up">＋</button><button data-move="KeyS" aria-label="Swim backward">↓</button><button data-move="KeyQ" aria-label="Swim down">−</button></div>
       <div class="dive-toast" id="dive-toast" role="status"></div>
@@ -94,6 +103,14 @@ export class Expedition {
     guide.setAttribute('aria-labelledby','dive-guide-title');guide.querySelector('h2').id='dive-guide-title';
     const guideClose=document.createElement('button');guideClose.className='guide-close';guideClose.textContent='×';guideClose.setAttribute('aria-label','Close help');guideClose.autofocus=true;guideClose.onclick=()=>guide.close();guide.prepend(guideClose);
     $('dive-surface').onclick=()=>this.surface();$('dive-descend').onclick=()=>this.visit('deep');$('dive-lab-toggle').onclick=()=>this.toggleLab();
+    $('close-world-lab').onclick=()=>{this.toggleLab(false);$('dive-lab-toggle').focus();};
+    $('begin-dive').onclick=()=>this.visit(this.world.habitat.id);$('surface-lab').onclick=()=>this.toggleLab(true);
+    $('return-sea-level').onclick=()=>this.surface();
+    root.querySelectorAll('[data-lamp]').forEach(b=>b.onclick=()=>this.setLampMode(b.dataset.lamp));
+    root.querySelectorAll('[data-lab-tab]').forEach((b,index)=>{
+      b.onclick=()=>this.selectLabTab(b.dataset.labTab);
+      b.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();e.stopPropagation();const next=e.key==='Home'?0:e.key==='End'?LAB_TABS.length-1:(index+(e.key==='ArrowRight'?1:-1)+LAB_TABS.length)%LAB_TABS.length;this.selectLabTab(LAB_TABS[next][0]);$(`lab-tab-${LAB_TABS[next][0]}`).focus();};
+    });
     $('journey-stop').onclick=()=>this.setSwim(true);
     $('float-waterline').onclick=()=>this.waterline();
     root.querySelectorAll('[data-depth]').forEach(b=>b.onclick=()=>b.dataset.depth==='vent'?this.visit('deep'):+b.dataset.depth===0?this.surface():this.travelTo(transectPose(+b.dataset.depth,this.world.recipe),`${(+b.dataset.depth).toLocaleString()} m`));
@@ -108,14 +125,14 @@ export class Expedition {
     $('dive-pause').onclick=()=>this.pause();$('dive-lamp').onclick=()=>this.lamp();$('dive-photo').onclick=()=>this.photograph();
     $('grow-seed').onclick=()=>this.regenerate(parseSeed($('world-seed').value));
     $('world-seed').addEventListener('keydown',e=>{if(e.key==='Enter')this.regenerate(parseSeed(e.target.value));});
-    $('new-seed').onclick=()=>this.newSeed();$('reset-world').onclick=()=>{this.world.settings={...GENERATOR_DEFAULTS};this.regenerate(713);this.syncDials();};
+    $('new-seed').onclick=()=>this.newSeed();$('reset-world').onclick=()=>this.resetRecipe();
     $('share-world').onclick=()=>this.share();$('show-dive-ui').onclick=()=>this.setControlsHidden(false);
-    $('dive-quality').value=this.app.quality.adaptive?'auto':this.app.quality.presetName;
-    $('dive-quality').onchange=e=>{const auto=e.target.value==='auto';this.app.quality.adaptive=auto;if(!auto)this.app.setQualityPreset(e.target.value);this.writeURL();};
-    const shape=[['relief','Terrain relief',0.2,2.2],['life','Living cover',0,1.8],['height','Kelp height',0.3,1.4],['shoal','Animal abundance',0,2]];
+    root.querySelectorAll('[data-quality]').forEach(b=>b.onclick=()=>this.setRenderingQuality(b.dataset.quality));
+    this.syncQualityButtons();
+    const shape=[['relief','Terrain relief',0.2,2.2],['life','Living cover',0,1.8],['height','Kelp height',0.3,1.4]];
     const water=[['clarity','Water clarity',0.35,2],['current','Current strength',0,3],['glow','Bioluminescence',0,3]];
     for(const [key,label,min,max] of shape)this.addDial('generator-dials',key,label,min,max,0.05,false);
-    for(const [key,label] of [['predators','Hunters'],['benthos','Bottom dwellers'],['jellies','Jellies & drifters']])this.addDial('fauna-dials',key,label,0,2,.05,false);
+    for(const [key,label] of [['shoal','Animal abundance'],['predators','Hunters'],['benthos','Bottom dwellers'],['jellies','Jellies & drifters']])this.addDial('fauna-dials',key,label,0,2,.05,false);
     for(const [key,label,min,max] of water)this.addDial('water-dials',key,label,min,max,0.05,true);
     this.addDial('deep-dials','upwelling','Deep upwelling',0,3,0.05,true);
     for(const [key,label,min,max,step] of [['sunElevation','Sun elevation',-20,80,1],['cloudCoverage','Cloud cover',0,1,0.01],['windSpeed','Wind speed',0,60,0.5],['swellHs','Swell height',0,22,0.1],['storm','Storm intensity',0,1,0.05]])this.addDial('weather-dials',key,label,min,max,step,true,true);
@@ -166,7 +183,9 @@ export class Expedition {
     window.addEventListener('keydown',e=>{
       if(!this.active)return;
       if(this.guide.open)return;
-      if(e.target.matches?.('input,textarea,select,button')||e.code==='Tab')return;
+      if(e.code==='Escape'&&!$('dive-lab').hidden){e.preventDefault();e.stopImmediatePropagation();this.toggleLab(false);$('dive-lab-toggle').focus();return;}
+      if(e.target.matches?.('input,textarea,select')||e.code==='Tab')return;
+      if(e.target.matches?.('button')&&['Space','Enter'].includes(e.code))return;
       if(e.repeat&&['KeyG','KeyR','KeyH','KeyP','KeyL','KeyF'].includes(e.code))return;
       const actions={KeyG:()=>this.toggleLab(),KeyR:()=>this.newSeed(),KeyH:()=>this.setControlsHidden(!document.body.classList.contains('dive-clean')),KeyP:()=>this.pause(),KeyF:()=>this.setSwim(!this.app.cine.free),KeyL:()=>this.lamp(),Slash:()=>this.guide.showModal(),Digit1:()=>this.visit('reef'),Digit2:()=>this.visit('kelp'),Digit3:()=>this.visit('blue'),Digit4:()=>this.visit('deep'),Escape:()=>this.toggleLab(false)};
       if(actions[e.code]){e.preventDefault();e.stopImmediatePropagation();actions[e.code]();}
@@ -184,11 +203,18 @@ export class Expedition {
     this.hasEntered=true;this.syncLabels();this.syncDials();this.syncWeatherButtons();this.writeURL();
   }
 
+  startAtSurface(clearance=SURFACE_EYE_HEIGHT) {
+    const h=this.world.habitat,y=this.app.waterInterface.height+clearance;
+    this.resetView({eye:[h.eye[0],y,h.eye[2]],look:[h.look[0],y-.8,h.look[2]-100]});
+    this.floatAtSurface=true;this.surfaceClearance=clearance;
+  }
+
   surface() {
     const p=this.app.camera.position,dir=this.app.camera.getWorldDirection(new THREE.Vector3());
     const horizon=new THREE.Vector3(dir.x,0,dir.z).normalize();if(horizon.lengthSq()<.1)horizon.set(0,0,-1);
-    const y=U.uSeaLevel.value+Math.max(9,(this.app.ocean.significantWaveHeight||0)*1.25);
-    this.travelTo({eye:[p.x,y,p.z],look:[p.x+horizon.x*300,y-8,p.z+horizon.z*300]},'the surface',null,true);
+    const y=this.app.waterInterface.height+SURFACE_EYE_HEIGHT;
+    this.travelTo({eye:[p.x,y,p.z],look:[p.x+horizon.x*300,y-.8,p.z+horizon.z*300]},'the surface',null,true);
+    this.travel.floatSurface=true;this.travel.surfaceClearance=SURFACE_EYE_HEIGHT;
   }
 
   visit(id) {
@@ -201,7 +227,7 @@ export class Expedition {
     const p=this.app.camera.position,dir=this.app.camera.getWorldDirection(new THREE.Vector3());
     const r=Math.hypot(dir.x,dir.z)||1;
     this.travelTo({eye:[p.x,U.uSeaLevel.value+.08,p.z],look:[p.x+dir.x/r*200,U.uSeaLevel.value+.08,p.z+dir.z/r*200]},'the waterline',null,true);
-    this.travel.floatSurface=true;
+    this.travel.floatSurface=true;this.travel.surfaceClearance=.08;
   }
 
   travelTo(destination,title,id=null,vertical=false) {
@@ -246,6 +272,11 @@ export class Expedition {
 
   newSeed() { const a=new Uint32Array(1);crypto.getRandomValues(a);this.regenerate(a[0]%1000000); }
 
+  resetRecipe() {
+    this.world.settings={...GENERATOR_DEFAULTS};this.setWeather('day');this.setLampMode('auto');
+    this.regenerate(713);this.syncDials();
+  }
+
   resetView(pose=this.world.habitat) {
     const h=pose,c=this.app.cine,cam=this.app.camera;
     cam.position.fromArray(h.eye);cam.lookAt(...h.look);cam.fov=56;cam.updateProjectionMatrix();
@@ -285,13 +316,15 @@ export class Expedition {
       if(trip.index>=trip.points.length){
         if(trip.id)this.world.select(trip.id);
         this.floatAtSurface=trip.floatSurface||false;
+        this.surfaceClearance=trip.surfaceClearance??SURFACE_EYE_HEIGHT;
         this.travel=null;$('dive-journey').hidden=true;this.captureDrift();this.syncLabels();this.setSwim(false);this.writeURL();
       }
     }else{
       if(!this.driftPose)this.captureDrift();
       const t=(time-this.started)*.035,pose=this.driftPose,previousY=cam.position.y;
-      cam.position.fromArray(pose.eye).add(new THREE.Vector3(Math.sin(t)*1.5,Math.sin(t*1.3)*.45,Math.sin(t*.7)*.7));
-      if(this.floatAtSurface){cam.position.y=THREE.MathUtils.lerp(previousY,this.app.waterInterface.height+.08,1-Math.exp(-dt*14));pose.look[1]=cam.position.y;}
+      cam.position.fromArray(pose.eye);
+      if(!this.reducedMotion)cam.position.add(new THREE.Vector3(Math.sin(t)*1.5,Math.sin(t*1.3)*.45,Math.sin(t*.7)*.7));
+      if(this.floatAtSurface){cam.position.y=floatEyeHeight(previousY,this.app.waterInterface.height,this.surfaceClearance,dt);pose.look[1]=cam.position.y-(this.surfaceClearance>.5?.45:0);}
       this.constrain(cam.position);cam.lookAt(...pose.look);
     }
     cam.getWorldDirection(this.lookTarget);c._smoothLook.copy(cam.position).addScaledVector(this.lookTarget,45);c._smoothPos.copy(cam.position);
@@ -334,6 +367,7 @@ export class Expedition {
       d.input.value=v;d.out.textContent=d.fmt(v);
     }
     $('world-seed').value=this.world.seed;
+    this.syncLampButtons();
   }
 
   syncLabels() {
@@ -351,8 +385,17 @@ export class Expedition {
 
   toggleLab(force) {
     const on=force??$('dive-lab').hidden;$('dive-lab').hidden=!on;
+    if(on&&!this.labVisited){this.selectLabTab(this.floatAtSurface||this.app.camera.position.y>this.app.waterInterface.height?'weather':'world');this.labVisited=true;}
     $('dive-lab-toggle').setAttribute('aria-expanded',String(on));document.body.classList.toggle('lab-open',on);
     this.root.querySelector('.dive-depth').inert=on;
+  }
+
+  selectLabTab(id) {
+    if(!LAB_TABS.some(t=>t[0]===id))return;
+    this.labTab=id;
+    this.root.querySelectorAll('[data-lab-tab]').forEach(b=>{const selected=b.dataset.labTab===id;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;});
+    this.root.querySelectorAll('[data-lab-panel]').forEach(panel=>{panel.hidden=panel.dataset.labPanel!==id;});
+    $('lab-scroll').scrollTop=0;
   }
 
   setControlsHidden(on) {
@@ -367,7 +410,11 @@ export class Expedition {
     $('dive-pause').setAttribute('aria-pressed',String(this.app.paused));
     $('dive-pause').innerHTML=this.app.paused?'<span aria-hidden="true">▶</span>':icon('pause');
   }
-  lamp() { this.lampMode=U.uLamp.value>0?'off':'on'; }
+  syncLampButtons() {this.root.querySelectorAll('[data-lamp]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lamp===this.lampMode)));}
+  setLampMode(mode) {this.lampMode=['on','off'].includes(mode)?mode:'auto';this.syncLampButtons();this.writeURL();}
+  syncQualityButtons() {const mode=this.app.quality.adaptive?'auto':this.app.quality.presetName;this.root.querySelectorAll('[data-quality]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.quality===mode)));}
+  setRenderingQuality(mode) {this.app.quality.adaptive=mode==='auto';if(mode!=='auto')this.app.setQualityPreset(mode);this.syncQualityButtons();this.writeURL();}
+  lamp() { this.setLampMode(U.uLamp.value>0?'off':'on'); }
 
   updateUI() {
     if(!this.active)return;
@@ -391,7 +438,10 @@ export class Expedition {
     $('dive-depth-value').dataset.position=a.camera.position.toArray().map(v=>v.toFixed(3)).join(',');
     $('dive-depth-value').dataset.medium=Math.abs(depth)<.4?'waterline':depth>0?'water':'air';
     $('dive-depth-value').dataset.floor=this.world.floor(a.camera.position.x,a.camera.position.z).toFixed(3);
-    const zone=depthZone(Math.round(depth/5)*5);
+    const zone=depthZone(this.floatAtSurface?-this.surfaceClearance:depth<2?depth:Math.round(depth/5)*5);
+    const atSurface=(this.floatAtSurface||depth<.4&&depth>-8)&&!this.travel;
+    $('surface-entry').hidden=!atSurface;document.body.classList.toggle('at-surface',atSurface);
+    $('begin-dive').textContent={reef:'Dive into the reef',kelp:'Dive into the kelp forest',blue:'Dive into open water',deep:'Dive to the vent field'}[this.world.habitat.id];
     let closest=null,dist=Infinity;
     for(const site of this.world.sites.values()){const d=a.camera.position.distanceTo(new THREE.Vector3(...site.habitat.eye));if(d<dist){dist=d;closest=site.habitat;}}
     const atSite=depth>1&&dist<85&&Math.abs(a.camera.position.y-closest.eye[1])<45;
@@ -399,10 +449,10 @@ export class Expedition {
     $('dive-subtitle').textContent=atSite?closest.subtitle:zone.subtitle;
     $('dive-site-label').textContent=atSite?`${closest.number} / ${zone.label}`:zone.label;
     const neighbors=this.world.fauna.nearbySpecies;
-    $('fauna-readout').textContent=neighbors.length?'Nearby · '+neighbors.join(' · '):'';
+    $('fauna-readout').textContent=neighbors.length?(atSurface?'Below · ':'Nearby · ')+neighbors.join(' · '):'';
     $('fauna-readout').dataset.count=this.world.fauna.visibleCount;
     this.root.querySelectorAll('[data-site]').forEach(b=>b.setAttribute('aria-pressed',String(atSite&&b.dataset.site===closest.id)));
-    $('dive-status-text').textContent=`${a.paused?'PAUSED':this.travel?(this.travel.ascending?'ASCENDING':'DESCENDING'):a.cine.free?'FREE SWIM':'SLOW DRIFT'} · ONE OCEAN · SEED ${this.world.seed}`;
+    $('dive-status-text').textContent=`${a.paused?'PAUSED':this.travel?(this.travel.ascending?'ASCENDING':'DESCENDING'):this.floatAtSurface?'FLOATING':a.cine.free?'FREE SWIM':'SLOW DRIFT'} · ONE OCEAN · SEED ${this.world.seed}`;
     if(this.travel){
       const t=this.travel;$('journey-label').textContent=`${t.ascending?'Ascending to':'Travelling to'} ${t.title}`;
       $('journey-progress').value=t.total>0?t.done/t.total:1;
@@ -423,8 +473,10 @@ export class Expedition {
     for(const [key,value] of Object.entries(this.world.settings))if(value!==GENERATOR_DEFAULTS[key])p.set(key,Number(value.toFixed(3)));
     p.set('light',this.weatherMode==='custom'?this.weatherBaseMode:this.weatherMode);
     if(this.weatherMode==='custom')for(const key of Object.keys(this.weatherRanges))p.set(key,Number(this.app.weather.target[key].toFixed(4)));
-    if(this.app.camera.position.y>0)p.set('surface','1');
+    if(this.floatAtSurface)p.set('surface',this.surfaceClearance<.5?'waterline':'1');
+    else if(this.app.camera.position.y>this.app.waterInterface.height)p.set('surface','1');
     else if(Math.abs(this.app.camera.position.y-this.world.habitat.eye[1])>45)p.set('depth',Math.round(-this.app.camera.position.y));
+    if(this.lampMode!=='auto')p.set('lamp',this.lampMode);
     if(!this.app.quality.adaptive){p.set('preset',this.app.quality.presetName);p.set('adaptive','0');}
     if(this.app.params.get('profile')==='1')p.set('profile','1');
     history.replaceState(null,'',`${location.pathname}?${p}`);
