@@ -68,7 +68,7 @@ export function createOceanTerrain(recipe) {
 
 export function createPelagicLife(recipe) {
   const group=new THREE.Group();group.name='Life between the surface and the abyss';
-  const rng=seeded(recipe.seed+611),canyonCount=Math.round(86*(recipe.shoal??1)),columnCount=Math.round(104*(recipe.shoal??1)),count=canyonCount+columnCount;
+  const rng=seeded(recipe.seed+611),gel=(recipe.shoal??1)*(recipe.jellies??.65),canyonCount=Math.round(14*gel),columnCount=Math.round(18*gel),count=canyonCount+columnCount;
   const g=jellyGeometry(rng,.65),m=waterMaterial(5,{name:'twilight-jellies',motion:3,glow:.85,opacity:.8,transparent:true});
   const jellies=new THREE.InstancedMesh(g,m,Math.max(1,count));jellies.count=count;
   const dummy=new THREE.Object3D(),data=[];
@@ -83,11 +83,13 @@ export function createPelagicLife(recipe) {
   group.add(jellies);jellies.frustumCulled=false;
   const chain=new Batch(waterMaterial(5,{name:'siphonophores',glow:.9,opacity:.7,transparent:true}));
   const bells=new Batch(waterMaterial(2,{name:'siphonophore-bells',glow:.8}));
-  if((recipe.shoal??1)>0)for(const [depth,column] of [[150,0],[220,0],[330,0],[460,0],[590,0],[740,0],[880,0],[1030,0],[1140,0],[1240,0],[180,1],[420,1],[720,1],[1030,1],[1270,1]]) {
+  const chainCount=Math.round(4*gel),chainStops=[[330,0],[740,0],[1140,1]];
+  for(let c=0;c<chainCount;c++) {
+    const [depth,column]=chainStops[c]||[180+(c*137)%1100,c%2];
     const pose=column?{eye:[0,-depth,-738]}:transectPose(depth,recipe),points=[];
     const offset=14+rng()*8;
     for(let i=0;i<65;i++) {
-      const t=i/64,p=new THREE.Vector3(pose.eye[0]+offset+Math.sin(t*5.7)*7, -depth+12-t*27,pose.eye[2]-16+Math.cos(t*5.7)*5);
+      const t=i/64,p=new THREE.Vector3(pose.eye[0]+offset+Math.sin(t*5.7)*4, -depth+8-t*17,pose.eye[2]-16+Math.cos(t*5.7)*3);
       for(let k=0;k<30&&p.y<oceanFloor(p.x,p.z,recipe)+2;k++)p.x-=.7;
       points.push(p);
       if(i%2===0){const b=new THREE.SphereGeometry(.18+Math.sin(t*Math.PI)*.16,9,7);b.scale(1,1.7,1);b.translate(p.x,p.y,p.z);bells.add(b,i%4?'#9edbd7':'#ebc3a5',rng);}
@@ -95,7 +97,7 @@ export function createPelagicLife(recipe) {
     const tube=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),96,.055,5,false);chain.add(tube,'#90cfd4',rng);
   }
   chain.finish(group,'Drifting siphonophore ribbons');bells.finish(group,'Living lantern chains');
-  return {group,count,update(time,cameraPosition){
+  return {group,count:count+chainCount,jellyCount:count,chainCount,update(time,cameraPosition){
     let visible=0;
     for(let i=0;i<count;i++){
       const d=data[i];

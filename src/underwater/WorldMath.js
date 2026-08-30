@@ -1,10 +1,10 @@
 import { oceanFloor, constrainToOcean } from './OceanDomain.js';
 export const TAU = Math.PI * 2;
 
-export const GENERATOR_DEFAULTS = { relief: 1, life: 1, height: 1, shoal: 1, clarity: 1, current: 1, glow: 1, upwelling: 0.65 };
+export const GENERATOR_DEFAULTS = { relief: 1, life: 1, height: 1, shoal: 1, clarity: 1, current: 1, glow: 1, upwelling: 0.65, predators: 1, benthos: 1, jellies: 0.65 };
 
 export function normalizeGenerator(input = {}) {
-  const ranges = { relief: [0.2, 2.2], life: [0, 1.8], height: [0.3, 1.4], shoal: [0, 2], clarity: [0.35, 2], current: [0, 3], glow: [0, 3], upwelling: [0, 3] };
+  const ranges = { relief: [0.2, 2.2], life: [0, 1.8], height: [0.3, 1.4], shoal: [0, 2], clarity: [0.35, 2], current: [0, 3], glow: [0, 3], upwelling: [0, 3], predators: [0, 2], benthos: [0, 2], jellies: [0, 2] };
   const out = {};
   for (const [key, fallback] of Object.entries(GENERATOR_DEFAULTS)) {
     const n = Number(input[key]);
@@ -59,10 +59,10 @@ export const HABITATS = [
   {
     id: 'deep', name: 'The midnight garden', short: 'The deep', number: '04',
     subtitle: 'Life, after the light.',
-    description: 'Mineral chimneys rise from the dark. Drifting jellies and living pinpoints of light reveal the shape of a hidden garden.',
+    description: 'Anglerfish wait above the mineral chimneys. Pale octopuses paddle through the dark, while crabs, isopods and sea cucumbers work the seafloor.',
     depth: 1434, color: '#a2e7de', tint: [0.002, 0.008, 0.018], extinction: [0.039, 0.025, 0.020],
     eye: [0, -1419, 36], look: [0, -1432, -11], seed: 82017,
-    species: 'JELLYFISH · TUBE WORMS · HYDROTHERMAL VENTS',
+    species: 'ANGLERFISH · FLAPJACK OCTOPUSES · VENT SHRIMP',
   },
 ];
 

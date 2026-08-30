@@ -56,8 +56,8 @@ export class Expedition {
       </header>
       <div class="dive-status"><b></b><span id="dive-status-text">LIVING WORLD · SEED 713</span></div>
       <div class="dive-journey" id="dive-journey" hidden><span id="journey-label"></span><button id="journey-stop">Stop here</button><progress id="journey-progress" max="1" value="0" aria-label="Journey progress"></progress></div>
-      <section class="dive-caption" aria-label="Current dive site"><div class="dive-eyebrow" id="dive-site-label">01 / THE SUNLIT ZONE</div><h1 id="dive-title">Coral cathedral</h1><p id="dive-subtitle">A world beneath the waves.</p></section>
-      <div class="dive-depth"><strong id="dive-depth-value">13.0</strong> m<small id="depth-reference">BELOW THE SURFACE</small><nav class="depth-stops" aria-label="Depth stops">${[[0,'Surface'],[200,'Twilight'],[1000,'Midnight'],[1419,'The abyss']].map(([d,l])=>`<button data-depth="${d}" aria-label="Travel to ${d===0?'the surface':`${d} metres`}"><i></i><span>${d===0?'0':d.toLocaleString()}<small>${l}</small></span></button>`).join('')}</nav></div>
+      <section class="dive-caption" aria-label="Current dive site"><div class="dive-eyebrow" id="dive-site-label">01 / THE SUNLIT ZONE</div><h1 id="dive-title">Coral cathedral</h1><p id="dive-subtitle">A world beneath the waves.</p><div class="dive-fauna" id="fauna-readout" aria-label="Nearby animal life"></div></section>
+      <div class="dive-depth"><strong id="dive-depth-value">13.0</strong> m<small id="depth-reference">BELOW THE SURFACE</small><nav class="depth-stops" aria-label="Depth stops">${[[0,'Surface'],[200,'Twilight'],[600,'Lower twilight'],[1000,'Midnight'],[1419,'The abyss']].map(([d,l])=>`<button data-depth="${d}" aria-label="Travel to ${d===0?'the surface':`${d} metres`}"><i></i><span>${d===0?'0':d.toLocaleString()}<small>${l}</small></span></button>`).join('')}</nav></div>
       <footer class="dive-bottom">
         <nav class="dive-sites" aria-label="Dive sites">${HABITATS.map(h=>`<button class="dive-site" data-site="${h.id}" aria-label="Visit ${h.name}" aria-pressed="${h.id==='reef'}"><span class="site-number">${h.number}</span><span class="site-name">${h.short}</span></button>`).join('')}</nav>
         <div class="dive-transport"><div class="dive-transport-buttons">
@@ -73,6 +73,8 @@ export class Expedition {
         <label for="world-seed">World seed</label><div class="dive-seed-row"><input id="world-seed" type="text" value="713" maxlength="40" spellcheck="false" aria-label="World seed"><button id="grow-seed" class="lab-button">Generate</button></div>
         <div class="lab-button-row"><button id="new-seed" class="lab-quiet">↻ New seed</button><button id="share-world" class="lab-quiet">Copy world link</button></div>
         <h3>SHAPE & LIFE</h3><div id="generator-dials"></div>
+        <h3>ANIMAL COMMUNITIES</h3><div id="fauna-dials"></div><p class="lab-note">Animal abundance scales the whole population. Hunters, bottom dwellers and jellies shape its balance. Nearby animals are named beside the dive title.</p>
+        <details class="lab-more"><summary>Life by depth</summary><p class="lab-note"><strong>Reef & forest</strong><br>Butterflyfish, parrotfish, sharks and seals; octopuses, crabs, sea stars and urchins on the bottom.</p><p class="lab-note"><strong>Open water</strong><br>Whales, dolphins, tuna, sunfish, rays and squid.</p><p class="lab-note"><strong>Twilight</strong><br>Lanternfish and hatchetfish give way to vampire squid, dragonfish and midwater shrimp.</p><p class="lab-note"><strong>Midnight & seafloor</strong><br>Anglerfish, gulper eels and flapjack octopuses above isopods, brittle stars, sea cucumbers, sea pens and vent shrimp.</p><p class="lab-note">Some small animals are enlarged. These habitats combine species from different oceans for exploration.</p></details>
         <h3>THROUGH THE WATER</h3><div id="water-dials"></div>
         <h3>FROM THE DEEP</h3><div id="deep-dials"></div><button id="seafloor-tremor" class="lab-button lab-wide">Trigger a seafloor tremor</button><p class="lab-note">Deep upwelling feeds a green surface bloom, luminous at night. A tremor stirs the bottom and sends a wave out across the sea.</p><p class="lab-stat" id="coupling-status"></p>
         <h3>WEATHER ABOVE</h3><div class="lab-weather">${[['day','Day'],['dusk','Dusk'],['storm','Storm'],['night','Night']].map(([id,label])=>`<button data-weather="${id}" aria-pressed="${id==='day'}">${label}</button>`).join('')}</div><div id="weather-dials"></div>
@@ -110,9 +112,10 @@ export class Expedition {
     $('share-world').onclick=()=>this.share();$('show-dive-ui').onclick=()=>this.setControlsHidden(false);
     $('dive-quality').value=this.app.quality.adaptive?'auto':this.app.quality.presetName;
     $('dive-quality').onchange=e=>{const auto=e.target.value==='auto';this.app.quality.adaptive=auto;if(!auto)this.app.setQualityPreset(e.target.value);this.writeURL();};
-    const shape=[['relief','Terrain relief',0.2,2.2],['life','Living cover',0,1.8],['height','Kelp height',0.3,1.4],['shoal','Fish abundance',0,2]];
+    const shape=[['relief','Terrain relief',0.2,2.2],['life','Living cover',0,1.8],['height','Kelp height',0.3,1.4],['shoal','Animal abundance',0,2]];
     const water=[['clarity','Water clarity',0.35,2],['current','Current strength',0,3],['glow','Bioluminescence',0,3]];
     for(const [key,label,min,max] of shape)this.addDial('generator-dials',key,label,min,max,0.05,false);
+    for(const [key,label] of [['predators','Hunters'],['benthos','Bottom dwellers'],['jellies','Jellies & drifters']])this.addDial('fauna-dials',key,label,0,2,.05,false);
     for(const [key,label,min,max] of water)this.addDial('water-dials',key,label,min,max,0.05,true);
     this.addDial('deep-dials','upwelling','Deep upwelling',0,3,0.05,true);
     for(const [key,label,min,max,step] of [['sunElevation','Sun elevation',-20,80,1],['cloudCoverage','Cloud cover',0,1,0.01],['windSpeed','Wind speed',0,60,0.5],['swellHs','Swell height',0,22,0.1],['storm','Storm intensity',0,1,0.05]])this.addDial('weather-dials',key,label,min,max,step,true,true);
@@ -339,7 +342,9 @@ export class Expedition {
     $('dive-site-label').textContent=`${h.number} / ${h.id==='deep'?'THE MIDNIGHT ZONE':h.id==='blue'?'THE OPEN WATER':'THE SUNLIT ZONE'}`;
     this.root.querySelectorAll('[data-site]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.site===h.id)));
     $('dive-status-text').textContent=`ONE OCEAN · SEED ${this.world.seed}`;
-    $('world-stats').textContent=`SEED ${this.world.seed} · ${this.world.stats.fish.toLocaleString()} FISH · ${this.world.stats.animals} OTHER ANIMALS`;
+    $('world-stats').textContent=`SEED ${this.world.seed} · ${(this.world.stats.fish+this.world.stats.animals).toLocaleString()} ANIMALS · ${this.world.stats.forms} FORMS`;
+    $('world-stats').dataset.forms=this.world.stats.forms;
+    $('world-stats').dataset.animals=this.world.stats.fish+this.world.stats.animals;
     $('world-stats').dataset.generation=this.world.generation;$('world-stats').dataset.vertices=this.world.stats.vertices;
     $('world-seed').value=this.world.seed;
   }
@@ -393,6 +398,9 @@ export class Expedition {
     $('dive-title').textContent=atSite?closest.name:zone.name;
     $('dive-subtitle').textContent=atSite?closest.subtitle:zone.subtitle;
     $('dive-site-label').textContent=atSite?`${closest.number} / ${zone.label}`:zone.label;
+    const neighbors=this.world.fauna.nearbySpecies;
+    $('fauna-readout').textContent=neighbors.length?'Nearby · '+neighbors.join(' · '):'';
+    $('fauna-readout').dataset.count=this.world.fauna.visibleCount;
     this.root.querySelectorAll('[data-site]').forEach(b=>b.setAttribute('aria-pressed',String(atSite&&b.dataset.site===closest.id)));
     $('dive-status-text').textContent=`${a.paused?'PAUSED':this.travel?(this.travel.ascending?'ASCENDING':'DESCENDING'):a.cine.free?'FREE SWIM':'SLOW DRIFT'} · ONE OCEAN · SEED ${this.world.seed}`;
     if(this.travel){

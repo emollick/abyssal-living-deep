@@ -10,10 +10,10 @@ A procedural expansion of [ABYSSAL by Token-Gremlin](https://github.com/Token-Gr
 
 | Dive site | Landscape and life |
 | --- | --- |
-| Coral cathedral | Eroded limestone arches, layered reef shelves, branching and plate coral, barrel sponges, brain coral, shoals and manta rays. |
-| The sunken forest | A seeded canopy of giant kelp, individually modeled ribbons, sandy channels, silver fish and swimming turtles. |
-| Into the blue | A continental drop-off, stone pinnacles, a passing humpback whale, shoals and drifting jellies. |
-| The midnight garden | Mineral chimneys, rising vent plumes, tube worms, luminous colonies and pulsing jellyfish. |
+| Coral cathedral | Limestone arches and coral shelves; striped butterflyfish, parrotfish, reef sharks and manta rays above octopuses, crabs, sea stars and urchins. |
+| The sunken forest | A seeded canopy of giant kelp, seals, silver shoals and turtles; crabs, octopuses, sea stars and urchins on the sandy floor. |
+| Into the blue | A continental drop-off, stone pinnacles, a passing humpback whale, dolphins, tuna, ocean sunfish and jetting squid. |
+| The midnight garden | Mineral chimneys, vent plumes and tube worms; anglerfish, gulper eels and flapjack octopuses above isopods, brittle stars, sea cucumbers and vent shrimp. |
 
 All four habitats exist together in one generated landscape. The site buttons travel between them; they do not replace the scene or reset the weather. **Ascend** rises vertically to the surface. **Descend** follows the canyon from the shelf, or dives directly when you are already over the trench. Choose a depth stop, interrupt a journey with **Stop here**, or swim freely with **Q / E** to descend and ascend.
 
@@ -21,16 +21,25 @@ All four habitats exist together in one generated landscape. The site buttons tr
 
 | The sunken forest | Into the blue |
 | --- | --- |
-| ![Procedural kelp forest](docs/media/living-kelp.jpg) | ![A whale above a silver shoal](docs/media/living-blue.jpg) |
+| ![Seals above a procedural kelp forest](docs/media/living-kelp.jpg) | ![Sunfish, tuna and squid near a whale](docs/media/living-blue.jpg) |
 
-![Bioluminescent jellyfish in the midnight garden](docs/media/living-deep.jpg)
+The descent has overlapping animal communities. Around **200 metres**, lanternfish, hatchetfish, squid and midwater shrimp gather beside the canyon. At **600 metres**, vampire squid and dragonfish join them. At **1,000 metres**, anglerfish, gulper eels and flapjack octopuses appear. Sea pens and brittle stars occupy the slope; the vent garden has a separate community on the bottom. The **Nearby** line names animals close to your position.
+
+![Vampire squid, dragonfish and hatchetfish in the lower twilight](docs/media/living-twilight.jpg)
+
+![Anglerfish, octopuses, isopods and brittle stars in the midnight garden](docs/media/living-deep.jpg)
+
+The 25 added creature types have generated anatomy, seeded proportions and markings, and movement suited to their bodies: tail strokes, fin paddling, squid pulses, curling arms and walking legs. Small fish move away from nearby swimming hunters. Jellies and long drifting chains are sparse at the default settings.
 
 ## Procedural dials
 
 - **Terrain relief** changes the seeded seafloor and rock formations.
 - **Living cover** rebuilds the density of coral, kelp and benthic life.
 - **Kelp height** rebuilds the forest canopy, wherever you are in the ocean.
-- **Fish abundance** rebuilds shoals and changes jellyfish abundance. Zero removes all swimming animals.
+- **Animal abundance** scales the animal population, including swimmers and bottom dwellers. Zero removes them all.
+- **Hunters** changes the abundance of sharks, tuna, dragonfish, anglerfish and gulper eels.
+- **Bottom dwellers** changes octopuses, crabs, sea stars, urchins, isopods, sea cucumbers, sea pens and vent shrimp independently of swimming animals.
+- **Jellies & drifters** changes jellyfish and siphonophore chains. Zero removes both.
 - **Water clarity** changes wavelength-dependent extinction and visibility.
 - **Current strength** controls water advection, swimming drift, kelp and particles. Surface weather and disaster currents weaken with depth.
 - **Bioluminescence** controls living light, especially at night and in the deep.
@@ -46,7 +55,7 @@ Geometry dials rebuild on release. Water and weather dials respond while draggin
 | Control | Action |
 | --- | --- |
 | **Ascend / Descend** | Continuous travel to the surface / abyss |
-| **Depth stops** | Travel to the surface, twilight, midnight or vent garden |
+| **Depth stops** | Travel to the surface, 200 m, 600 m, 1,000 m or the vent garden |
 | **Drift / Swim** | Drift in place / manual exploration |
 | **W A S D** | Swim in the direction you look |
 | **Drag** | Look around |
@@ -70,7 +79,9 @@ The waterline samples all three FFT cascades and live event displacement. Clear 
 
 Below the surface are a continuous seeded seabed, a steep canyon, cold-water colonies, drifting siphonophore chains, wavelength-dependent attenuation, wave-driven caustics, shadows, light shafts, marine snow, kelp, instanced schools and generated animals. Cloud-volume baking preserves every depth slice, and the night sky includes procedural stars and a moon. Everything is generated from JavaScript and GLSL. There are no downloaded textures, models, fonts or audio files. Repository screenshots are documentation only.
 
-Travel speeds and transport times are compressed for exploration. This is an artistic simulation, not an ecological, oceanographic or disaster-prediction model.
+Travel speeds and transport times are compressed for exploration. Some small animals are enlarged, and these habitats combine species from different oceans. This is an artistic simulation, not an ecological, oceanographic or disaster-prediction model.
+
+Deep-water anatomy and broad habitat choices were informed by MBARI's profiles of [gulper eels](https://www.mbari.org/animal/whiptail-gulper-eel/), [flapjack octopuses](https://www.mbari.org/animal/flapjack-octopus/), [vampire squid](https://www.mbari.org/animal/vampire-squid/) and [anglerfish](https://www.mbari.org/animal/deep-sea-anglerfish/), and [NOAA's bioluminescence overview](https://oceanexplorer.noaa.gov/education/bioluminescence/). The generated populations and depth boundaries are composed for exploration; they are not distribution data. No source images or models are used by the app.
 
 ## Run locally
 
@@ -82,7 +93,7 @@ npm run dev
 ```
 
 ```sh
-npm test        # quality, generation, terrain, journeys and coupled flow/event checks
+npm test        # quality, terrain, journeys, coupled flow, fauna and generation checks
 npm run build  # static site in dist/
 npm run preview
 ```
@@ -96,6 +107,8 @@ Deploy `dist/` to any static host. `netlify.toml` contains the Netlify build set
 ?site=kelp&seed=5819&life=1.3&height=1.2&current=1.5
 ?site=deep&seed=82017&glow=1.5
 ?site=reef&seed=713&depth=200
+?site=reef&seed=713&depth=600&predators=1.4&jellies=0
+?site=deep&seed=713&benthos=1.5&shoal=1.2
 ?site=deep&seed=713&surface=1&light=night&upwelling=3
 ?site=reef&seed=713&light=storm&preset=high&adaptive=0
 ```
@@ -114,12 +127,14 @@ The existing rendering pipeline remains in `src/core`, `src/ocean`, `src/sky`, `
 | `OceanTerrain.js` | Continuous shelf and canyon, wall colonies and midwater life |
 | `WaterInterface.js` | Actual-wave probe and continuous air/water compositing |
 | `ReefGeometry.js` | Generated terrain, arches, coral, kelp, sponges and vents |
-| `MarineLife.js` | Generated animal anatomy and instanced schooling motion |
+| `MarineLife.js` | Shoals, rays, turtles, whales and jellyfish |
+| `FaunaGeometry.js` | Generated anatomy, markings and light organs for 25 added creature types |
+| `OceanFauna.js` | Seeded animal communities, population dials, schooling, avoidance and terrain-following movement |
 | `UnderwaterMaterial.js` | Surface shading, caustics, absorption, fog and water ceiling |
 | `UnderwaterWorld.js` | World generation, light shafts, shadows, particles and render integration |
 | `Expedition.js` | World lab, sharing, exploration controls and habitat selection |
 
-Logic tests cover all habitat-to-habitat routes across multiple seeds and terrain settings, agreement between rendered terrain and collision height, pause invariants, and effects in both directions. They do not replace visual testing. Inspect all habitats, complete ascent/descent journeys, the waterline, and clear/dusk/storm/night conditions. Keep the source free of external art assets.
+Logic tests cover all habitat-to-habitat routes across multiple seeds and terrain settings, agreement between rendered terrain and collision height, pause invariants, and effects in both directions. Fauna checks cover distinct anatomy, finite geometry, repeatable seeds, population controls, encounters along the route, seafloor clearance and continuous motion. They do not replace visual testing. Inspect all habitats and depth communities, complete ascent/descent journeys, the waterline, and clear/dusk/storm/night conditions. Keep the source free of external art assets.
 
 ## Credits and license
 

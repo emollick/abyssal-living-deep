@@ -169,7 +169,7 @@ export class MarineLife {
     this.rng=seeded(habitat.seed+407);this.animals=[];
     const rng=this.rng, multiplier=habitat.shoal??1;
     const deep=habitat.id==='deep',blue=habitat.id==='blue',kelp=habitat.id==='kelp';
-    this.fishCount=Math.round((deep?70:blue?1050:kelp?520:610)*multiplier);
+    this.fishCount=Math.round((deep?0:blue?1050:kelp?520:610)*multiplier);
     this.fish=new THREE.InstancedMesh(fishGeometry(),waterMaterial(4,{name:'schooling-fish',motion:1,glow:deep?0.12:0}),Math.max(1,this.fishCount));
     this.fish.count=this.fishCount;this.fish.frustumCulled=false;this.fish.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.group.add(this.fish);this.fishData=[];
@@ -188,7 +188,7 @@ export class MarineLife {
       if(!deep&&!kelp)for(let i=0;i<2;i++)this.addAnimal('manta',mantaGeometry(),waterMaterial(4,{motion:2}),i);
       if(kelp)for(let i=0;i<3;i++)this.addAnimal('turtle',turtleGeometry(),waterMaterial(4,{motion:1}),i);
       if(blue)this.addAnimal('whale',whaleGeometry(),waterMaterial(4,{motion:4}),0);
-      if(deep||blue)for(let i=0;i<Math.round((deep?29:9)*Math.min(1.5,multiplier));i++) {
+      if(deep||blue)for(let i=0;i<Math.round((deep?5:2)*Math.min(1.5,multiplier)*(habitat.jellies??.65));i++) {
         const mat=waterMaterial(5,{motion:3,glow:deep?1.1:0.6,opacity:0.8,transparent:true,depthWrite:false});
         this.addAnimal('jelly',jellyGeometry(rng),mat,i);
       }
@@ -199,7 +199,7 @@ export class MarineLife {
   addAnimal(type,geometry,material,index) {
     const mesh=new THREE.Mesh(geometry,material);mesh.name=type;this.group.add(mesh);
     const rng=this.rng;
-    this.animals.push({mesh,type,index,phase:rng()*TAU,x:(rng()-0.5)*75,z:(rng()-0.5)*80-8,y:0.2+rng()*0.8,scale:type==='jelly'?0.5+rng()*1.3:1});
+    this.animals.push({mesh,type,index,phase:rng()*TAU,x:(rng()-0.5)*75,z:(rng()-0.5)*80-8,y:0.2+rng()*0.8,scale:type==='jelly'?0.45+rng()*0.85:1});
   }
 
   update(time,cameraPosition) {

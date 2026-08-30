@@ -87,6 +87,13 @@ const VERT = /* glsl */ `
 ${OCEAN_COUPLING_GLSL}
 attribute vec3 color;
 attribute float aFlex;
+#ifdef FAUNA
+attribute float aGlow;
+attribute float aPart;
+attribute float aPhase;
+varying float vGlow;
+uniform float uAnchored;
+#endif
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec3 vColor;
@@ -116,9 +123,53 @@ void main() {
     p.xz *= 1.0 + pulse*0.075*smoothstep(-1.0,1.0,p.y);
     p.y += pulse*0.05;
   }
-  if (uMotion > 3.5) {
+  if (uMotion > 3.5 && uMotion < 4.5) {
     p.y += sin(uTime*1.1+p.x*0.35)*(1.0-smoothstep(-7.0,0.0,p.x))*0.45;
   }
+  #ifdef FAUNA
+    float animalPhase=aPhase;
+    #ifdef USE_INSTANCING
+      animalPhase+=instanceMatrix[3].x*.31+instanceMatrix[3].z*.27;
+    #endif
+    float clock=uTime+animalPhase;
+    if(uMotion>4.5&&uMotion<5.5){
+      float tail=1.0-smoothstep(-1.15,.3,p.x);
+      p.z+=sin(clock*4.3+p.x*3.8)*tail*.14;
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*3.1)*abs(p.z)*.09;
+    }
+    if(uMotion>5.5&&uMotion<6.5){
+      float pulse=sin(clock*3.2);
+      p.yz*=1.0+pulse*.055*(1.0-smoothstep(.2,1.1,p.x));
+      if(aPart>2.5&&aPart<3.5){p.y+=sin(clock*3.0-p.x*3.2)*.11;p.z+=cos(clock*2.6-p.x*2.3)*.10;}
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*4.1+abs(p.z)*3.0)*abs(p.z)*.13;
+    }
+    if(uMotion>6.5&&uMotion<7.5){
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*2.8)*abs(p.z)*.28;
+      if(aPart>2.5&&aPart<3.5){p.y+=sin(clock*1.5+length(p.xz)*3.0)*.07;p.xz*=1.0+sin(clock*1.6)*.045;}
+    }
+    if(uMotion>7.5&&uMotion<8.5){
+      float tail=max(0.0,-p.x);
+      p.z+=sin(clock*2.0+p.x*2.2)*min(tail*.22,.65);
+      p.y+=cos(clock*1.3+p.x*1.6)*min(tail*.055,.12);
+    }
+    if(uMotion>8.5&&uMotion<9.5&&aPart>3.5&&aPart<4.5){
+      p.x+=sin(clock*3.2)*.07;
+      p.y+=max(0.0,cos(clock*3.2))*.065;
+    }
+    if(uMotion>9.5&&uMotion<10.5){
+      p.y+=sin(clock*2.4+p.x*2.2)*(1.0-smoothstep(-1.2,.25,p.x))*.16;
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*2.3)*abs(p.z)*.13;
+    }
+    if(uMotion>10.5&&uMotion<11.5){
+      p.x+=sin(clock*.6+p.y*1.8)*max(p.y-.3,0.0)*.05;
+    }
+    if(uMotion>11.5){
+      if(aPart>.5&&aPart<1.5)p.y+=sin(clock*4.0+p.x*3.0)*max(-p.x,0.0)*.10;
+      if(aPart>3.5&&aPart<4.5){p.x+=sin(clock*5.1)*.04;p.y+=max(0.0,cos(clock*5.1))*.025;}
+    }
+    if(aPart>4.5&&aPart<5.5)p.z+=sin(clock*.9+p.y)*.035;
+    vGlow=aGlow;
+  #endif
   vLocal = p; vUv = uv; vColor = color;
   #ifdef USE_INSTANCING_COLOR
     vColor *= instanceColor;
@@ -133,7 +184,11 @@ void main() {
   float phase = wp.x*0.19+wp.z*0.14;
   vec3 flow=oceanFlow(wp.xyz,uTime);
   float current=length(flow)*1.3;
-  if(uMotion>.5){wp.xz+=flow.xz*sin(uTime*.21+phase*.2)*2.2;wp.y+=flow.y*cos(uTime*.32+phase)*.7;}
+  float advection=1.0;
+  #ifdef FAUNA
+    advection=1.0-uAnchored;
+  #endif
+  if(uMotion>.5){wp.xz+=flow.xz*sin(uTime*.21+phase*.2)*2.2*advection;wp.y+=flow.y*cos(uTime*.32+phase)*.7*advection;}
   wp.x += aFlex * (sin(uTime*(0.64+current*0.25)+phase) + sin(uTime*0.31+phase*0.7)*0.5) * current*1.45;
   wp.z += aFlex * sin(uTime*0.49+phase*1.13)*current*0.85;
   if(uKind>2.5&&uKind<3.5) {
@@ -156,6 +211,9 @@ uniform float uGlow;
 uniform float uOpacity;
 uniform float uPattern;
 uniform float uMotion;
+#ifdef FAUNA
+varying float vGlow;
+#endif
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec3 vColor;
@@ -203,7 +261,7 @@ void main() {
   } else if (uKind < 4.5) {
     float scales = sin(vLocal.x*93.0)*sin(vLocal.y*121.0)*0.035;
     base *= 1.0+scales;
-    if(uMotion>3.5)base*=0.78+fbm3(vLocal*1.4)*0.40;
+    if(uMotion>3.5&&uMotion<4.5)base*=0.78+fbm3(vLocal*1.4)*0.40;
   }
   // Small normal variation catches the light without a texture download.
   if (uKind < 2.5) n = normalize(n + (vec3(noise3(vWorld*8.0),noise3(vWorld*8.0+4.1),noise3(vWorld*8.0+9.7))-0.5)*0.16);
@@ -243,6 +301,9 @@ void main() {
     bio *= 0.25 + fresnel*1.8+ribs*0.33;
     col += base*bio;
   } else col += base*bio*(0.7+sin(uTime*1.3+vWorld.y*3.0)*0.3);
+  #ifdef FAUNA
+    col+=vColor*vGlow*uBioStrength*(.42+localDeep*1.6+uDiveNight*.8)*(.94+sin(uTime*1.5+vWorld.x)*.06);
+  #endif
   col = underwaterFog(col,vWorld,dist);
   float alpha = uOpacity;
   if (uKind > 4.5) alpha *= 0.22+fresnel*0.64;
@@ -260,7 +321,8 @@ export function waterMaterial(kind = 1, options = {}) {
     name: `underwater-${options.name || kind}`,
     glslVersion: THREE.GLSL3,
     vertexShader: VERT, fragmentShader: FRAG,
-    uniforms: { ...U, uKind: { value: kind }, uPattern: { value: options.pattern || 0 }, uMotion: { value: options.motion || 0 }, uGlow: { value: options.glow || 0 }, uOpacity: { value: options.opacity ?? 1 } },
+    uniforms: { ...U, uKind: { value: kind }, uPattern: { value: options.pattern || 0 }, uMotion: { value: options.motion || 0 }, uGlow: { value: options.glow || 0 }, uOpacity: { value: options.opacity ?? 1 }, uAnchored:{value:options.anchored?1:0} },
+    defines: options.fauna?{FAUNA:1}:{},
     side: options.side ?? THREE.DoubleSide,
     transparent: options.transparent || false,
     depthWrite: options.depthWrite ?? !options.transparent,

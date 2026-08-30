@@ -8,6 +8,7 @@ import { HABITATS, habitatFor, seeded, currentAt, normalizeGenerator, parseSeed 
 import { connectedHabitat, oceanFloor, smooth } from './OceanDomain.js';
 import { OceanDynamics, DEEP_SOURCE, flowAt } from './OceanDynamics.js';
 import { createOceanTerrain, createPelagicLife } from './OceanTerrain.js';
+import { OceanFauna } from './OceanFauna.js';
 import { OCEAN_COUPLING_GLSL } from '../ocean/OceanCouplingGLSL.js';
 
 const VOLUME_FRAG = /* glsl */ `
@@ -143,16 +144,22 @@ export class UnderwaterWorld {
     }
     const snow=this.makeParticles(recipe,[],false);root.add(snow);
     const pelagic=createPelagicLife(recipe);root.add(pelagic.group);
+    const fauna=new OceanFauna(recipe);root.add(fauna.group);
     if(this.root){this.scene.remove(this.root);disposeTree(this.root);}
-    this.root=root;this.scene.add(root);this.sites=sites;this.snow=snow;this.pelagic=pelagic;
+    this.root=root;this.scene.add(root);this.sites=sites;this.snow=snow;this.pelagic=pelagic;this.fauna=fauna;
     this.shadowDirty=true;
     this.settings=settings;this.seed=seed;this.recipe=recipe;this.habitat=sites.get(id)?.habitat||sites.get('reef').habitat;this.generation++;
     this.life=sites.get(this.habitat.id).life;
     this.bornAt=this.app.time;
     this.app.post && (this.app.post.reset=true);
     this.update(this.app.time,this.app.camera);
-    this.stats={fish:0,animals:pelagic.count,vertices:0,seed,generation:this.generation};
+    this.stats={fish:0,animals:pelagic.count+fauna.count,forms:fauna.typeCount,vertices:0,seed,generation:this.generation};
+    const legacyForms=new Set();
     for(const site of sites.values()){this.stats.fish+=site.life.fishCount;this.stats.animals+=site.life.animals.length;}
+    for(const site of sites.values()){if(site.life.fishCount)legacyForms.add('shoal');for(const a of site.life.animals)legacyForms.add(a.type);}
+    if(pelagic.jellyCount)legacyForms.add('jelly');
+    if(pelagic.chainCount)legacyForms.add('siphonophore');
+    this.stats.forms+=legacyForms.size;
     this.root.traverse(o=>{if(o.geometry)this.stats.vertices+=o.geometry.attributes.position.count;});
   }
 
@@ -208,6 +215,7 @@ export class UnderwaterWorld {
       site.group.visible=Math.hypot(camera.position.x-x,camera.position.z-z)<530&&Math.abs(camera.position.y-site.habitat.eye[1])<330;
     }
     this.pelagic.update(time-this.bornAt,camera.position);
+    this.fauna.update(time-this.bornAt,camera.position);
     this.root.traverse(o=>{if(o.material?.uniforms?.uPixelHeight)o.material.uniforms.uPixelHeight.value=this.app.renderHeight;});
   }
 
@@ -232,7 +240,7 @@ export class UnderwaterWorld {
     cam.position.copy(center).addScaledVector(sun,120);cam.lookAt(center);cam.updateMatrixWorld();
     U.uReefShadowMatrix.value.multiplyMatrices(cam.projectionMatrix,cam.matrixWorldInverse);
     const hidden=[];
-    this.root.traverse(o=>{if(o.isPoints||o.name==='Marine life'||o===this.pelagic.group){hidden.push([o,o.visible]);o.visible=false;}});
+    this.root.traverse(o=>{if(o.isPoints||o.name==='Marine life'||o===this.pelagic.group||o===this.fauna.group){hidden.push([o,o.visible]);o.visible=false;}});
     this.scene.overrideMaterial=this.shadowMaterial;
     r.setRenderTarget(this.shadowTarget);r.setClearColor(0xffffff,1);r.clear();r.render(this.scene,cam);
     this.scene.overrideMaterial=null;hidden.forEach(([o,v])=>o.visible=v);

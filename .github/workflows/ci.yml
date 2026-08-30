@@ -36,9 +36,8 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
 
-      # Pure logic, no GPU needed: proves the adaptive quality loop still
-      # rescues a frame rate it cannot sustain, and still leaves a healthy one
-      # alone.
+      # Pure logic and geometry checks, without a GPU: quality adaptation,
+      # connected terrain and routes, ocean coupling, and procedural fauna.
       - name: Test
         run: npm test
 
