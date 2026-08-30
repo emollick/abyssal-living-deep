@@ -49,7 +49,7 @@ export class Expedition {
     root.innerHTML=`
       <div class="dive-shade"></div>
       <header class="dive-header">
-        <div class="dive-brand"><span class="dive-wordmark">ABYSSAL</span><span class="dive-edition">THE LIVING DEEP<br>PROCEDURAL OCEAN EXPLORER</span></div>
+        <div class="dive-brand"><span class="dive-wordmark">ABYSSAL</span></div>
         <nav class="dive-actions" aria-label="Explorer tools">
           <button class="dive-action" id="dive-surface" aria-label="Ascend to the surface">${icon('up')}<span>Ascend</span></button>
           <button class="dive-action" id="dive-descend" aria-label="Descend to the abyss"><span aria-hidden="true">↓</span><span>Descend</span></button>
@@ -57,12 +57,11 @@ export class Expedition {
           <button class="dive-action help-action" id="dive-help-toggle" aria-label="Help and credits">?</button>
         </nav>
       </header>
-      <div class="dive-status"><b></b><span id="dive-status-text">LIVING WORLD · SEED 713</span></div>
       <div class="dive-journey" id="dive-journey" hidden><span id="journey-label"></span><button id="journey-stop">Stop here</button><progress id="journey-progress" max="1" value="0" aria-label="Journey progress"></progress></div>
-      <section class="dive-caption" aria-label="Current dive site"><div class="dive-eyebrow" id="dive-site-label">AT SEA LEVEL</div><h1 id="dive-title">The breathing sea</h1><p id="dive-subtitle">Drift with the waves, or dive into the world below.</p><div class="dive-fauna" id="fauna-readout" aria-label="Nearby animal life"></div><div class="surface-entry" id="surface-entry" hidden><button id="begin-dive">Dive below</button><button id="surface-lab">Open world lab</button></div></section>
+      <section class="dive-caption" aria-label="Current dive site"><h1 id="dive-title">The breathing sea</h1><p id="dive-subtitle">Drift with the waves, or dive into the world below.</p><div class="dive-fauna" id="fauna-readout" aria-label="Nearby animal life"></div><div class="surface-entry" id="surface-entry" hidden><button id="begin-dive">Dive below</button></div></section>
       <div class="dive-depth"><strong id="dive-depth-value">13.0</strong> m<small id="depth-reference">BELOW THE SURFACE</small><nav class="depth-stops" aria-label="Depth stops">${[[0,'Surface'],[200,'Twilight'],[600,'Lower twilight'],[1000,'Midnight'],['vent','Vent field']].map(([d,l])=>`<button data-depth="${d}" aria-label="Travel to ${d===0?'the surface':d==='vent'?'the vent field':`${d} metres`}"><i></i><span>${d===0?'0':d==='vent'?'≈1,400':d.toLocaleString()}<small>${l}</small></span></button>`).join('')}</nav></div>
       <footer class="dive-bottom">
-        <nav class="dive-sites" aria-label="Dive sites">${HABITATS.map(h=>`<button class="dive-site" data-site="${h.id}" aria-label="Visit ${h.name}" aria-pressed="${h.id==='reef'}"><span class="site-number">${h.number}</span><span class="site-name">${h.short}</span></button>`).join('')}</nav>
+        <nav class="dive-sites" aria-label="Dive sites">${HABITATS.map(h=>`<button class="dive-site" data-site="${h.id}" aria-label="Visit ${h.name}" aria-pressed="${h.id==='reef'}"><span class="site-name">${h.short}</span></button>`).join('')}</nav>
         <div class="dive-transport"><div class="dive-transport-buttons">
           <button class="dive-action" id="dive-drift" aria-pressed="true">Drift</button>
           <button class="dive-action" id="dive-swim" aria-pressed="false">Swim</button>
@@ -72,31 +71,31 @@ export class Expedition {
         </div><span class="dive-keyhint" id="dive-keyhint">Choose <kbd>Swim</kbd> to explore · <kbd>G</kbd> world lab · <kbd>H</kbd> hide controls</span></div>
       </footer>
       <aside class="dive-lab" id="dive-lab" aria-label="Procedural world lab" hidden>
-        <div class="lab-header"><div class="lab-title-row"><h2>World lab</h2><button id="close-world-lab" aria-label="Close world lab">×</button></div><p class="dive-lab-intro">Shape the ocean, its life, and its weather.</p><div class="lab-tabs" role="tablist" aria-label="World lab sections">${LAB_TABS.map(([id,label])=>`<button role="tab" id="lab-tab-${id}" data-lab-tab="${id}" aria-controls="lab-panel-${id}" aria-selected="${id==='world'}" tabindex="${id==='world'?0:-1}">${label}</button>`).join('')}</div></div>
+        <div class="lab-header"><div class="lab-title-row"><h2>World lab</h2><button id="close-world-lab" aria-label="Close world lab">×</button></div><div class="lab-tabs" role="tablist" aria-label="World lab sections">${LAB_TABS.map(([id,label])=>`<button role="tab" id="lab-tab-${id}" data-lab-tab="${id}" aria-controls="lab-panel-${id}" aria-selected="${id==='world'}" tabindex="${id==='world'?0:-1}">${label}</button>`).join('')}</div></div>
         <div class="lab-scroll" id="lab-scroll">
         <section class="lab-panel" id="lab-panel-world" data-lab-panel="world" role="tabpanel" aria-labelledby="lab-tab-world">
         <label for="world-seed">World seed</label><div class="dive-seed-row"><input id="world-seed" type="text" value="713" maxlength="40" spellcheck="false" aria-label="World seed"><button id="grow-seed" class="lab-button">Generate</button></div>
         <div class="lab-button-row"><button id="new-seed" class="lab-quiet">↻ New seed</button><button id="share-world" class="lab-quiet">Copy world link</button></div>
-        <h3>SHAPE & LIFE</h3><div id="generator-dials"></div>
+        <h3>Terrain & cover</h3><div id="generator-dials"></div>
         <p class="lab-note">The same seed and dials grow the same reef, forest and trench. Geometry changes apply when you release a dial.</p></section>
         <section class="lab-panel" id="lab-panel-life" data-lab-panel="life" role="tabpanel" aria-labelledby="lab-tab-life" hidden>
-        <h3>ANIMAL COMMUNITIES</h3><div id="fauna-dials"></div><p class="lab-note">Animal abundance scales the whole population. Hunters, bottom dwellers and jellies shape its balance. Nearby animals are named beside the dive title.</p>
+        <div id="fauna-dials"></div><p class="lab-note">Animal abundance scales the whole population. Hunters, bottom dwellers and jellies shape its balance. Nearby animals are named beside the dive title.</p>
         <details class="lab-more"><summary>Life by depth</summary><p class="lab-note"><strong>Reef & forest</strong><br>Butterflyfish, parrotfish, sharks and seals; octopuses, crabs, sea stars and urchins on the bottom.</p><p class="lab-note"><strong>Open water</strong><br>Whales, dolphins, tuna, sunfish, rays and squid.</p><p class="lab-note"><strong>Twilight</strong><br>Lanternfish and hatchetfish give way to vampire squid, dragonfish and midwater shrimp.</p><p class="lab-note"><strong>Midnight & seafloor</strong><br>Anglerfish, gulper eels and flapjack octopuses above isopods, brittle stars, sea cucumbers, sea pens and vent shrimp.</p><p class="lab-note">Animal sizes are approximate. These habitats combine species from different oceans for exploration.</p></details>
         </section><section class="lab-panel" id="lab-panel-water" data-lab-panel="water" role="tabpanel" aria-labelledby="lab-tab-water" hidden>
-        <h3>THROUGH THE WATER</h3><div id="water-dials"></div><div class="lab-control-label" id="light-mode-label">Dive light</div><div class="lab-choices" role="group" aria-labelledby="light-mode-label">${[['auto','Automatic'],['on','On'],['off','Off']].map(([id,label])=>`<button data-lamp="${id}" aria-label="${label} dive light" aria-pressed="${id==='auto'}">${label}</button>`).join('')}</div><p class="lab-note">Automatic light comes on as sunlight fades with depth.</p>
-        <h3>FROM THE DEEP</h3><div id="deep-dials"></div><button id="seafloor-tremor" class="lab-button lab-wide">Trigger a seafloor tremor</button><p class="lab-note">Deep upwelling feeds a green surface bloom, luminous at night. A tremor stirs the bottom and sends a wave out across the sea.</p><p class="lab-stat" id="coupling-status"></p>
+        <div id="water-dials"></div><div class="lab-control-label" id="light-mode-label">Dive light</div><div class="lab-choices" role="group" aria-labelledby="light-mode-label">${[['auto','Automatic'],['on','On'],['off','Off']].map(([id,label])=>`<button data-lamp="${id}" aria-label="${label} dive light" aria-pressed="${id==='auto'}">${label}</button>`).join('')}</div><p class="lab-note">Automatic light comes on as sunlight fades with depth.</p>
+        <h3>Upwelling & tremors</h3><div id="deep-dials"></div><button id="seafloor-tremor" class="lab-button lab-wide">Trigger a seafloor tremor</button><p class="lab-note">Deep upwelling feeds a green surface bloom, luminous at night. A tremor stirs the bottom and sends a wave out across the sea.</p><p class="lab-stat" id="coupling-status"></p>
         </section><section class="lab-panel" id="lab-panel-weather" data-lab-panel="weather" role="tabpanel" aria-labelledby="lab-tab-weather" hidden>
-        <h3>WEATHER ABOVE</h3><div class="lab-weather">${[['day','Day'],['dusk','Dusk'],['storm','Storm'],['night','Night']].map(([id,label])=>`<button data-weather="${id}" aria-pressed="${id==='day'}">${label}</button>`).join('')}</div><div id="weather-dials"></div>
+        <div class="lab-weather">${[['day','Day'],['dusk','Dusk'],['storm','Storm'],['night','Night']].map(([id,label])=>`<button data-weather="${id}" aria-pressed="${id==='day'}">${label}</button>`).join('')}</div><div id="weather-dials"></div>
         <details class="lab-more"><summary>More weather dials</summary><div id="weather-more"></div></details>
         <p class="lab-note" id="weather-depth-note">Storms carry motion and suspended particles into the shallows. Their energy fades with depth; the deep continues on its own currents.</p><div class="lab-events" aria-label="Ocean events">${[['rogue','Rogue wave'],['whirlpool','Whirlpool'],['tsunami','Tsunami'],['lightning','Lightning'],['waterspout','Waterspout'],['hurricane','Hurricane']].map(([id,label])=>`<button data-event="${id}" class="lab-quiet">${label}</button>`).join('')}<button id="clear-ocean-events" class="lab-quiet">Clear events</button></div>
         </section><details class="lab-more lab-view"><summary>View & controls</summary><button id="return-sea-level" class="lab-quiet lab-wide">Return to sea level</button><button id="float-waterline" class="lab-quiet lab-wide">Float at the waterline</button><div class="lab-control-label" id="quality-label">Rendering quality</div><div class="lab-choices" role="group" aria-labelledby="quality-label">${[['auto','Automatic'],['ultra','Ultra'],['high','High'],['medium','Medium'],['low','Low'],['potato','Lightest']].map(([id,label])=>`<button data-quality="${id}" aria-label="${label} rendering quality" aria-pressed="false">${label}</button>`).join('')}</div><p class="lab-note">WASD to swim · Drag to look · Q / E down / up · G opens the lab.</p><button class="lab-quiet lab-wide" id="lab-help">Controls & credits</button></details></div>
-        <div class="lab-finish"><div><p class="lab-stat" id="world-stats"></p><p class="lab-stat" id="world-performance"></p></div><button class="lab-quiet" id="reset-world">Reset recipe</button></div>
+        <p class="lab-feedback" id="lab-feedback" role="status"></p><div class="lab-finish"><p class="lab-stat" id="world-stats"></p><button class="lab-quiet" id="reset-world">Reset recipe</button></div>
       </aside>
       <div class="dive-mobile" aria-label="Swimming controls"><button data-move="KeyW" aria-label="Swim forward">↑</button><button data-move="KeyE" aria-label="Swim up">＋</button><button data-move="KeyS" aria-label="Swim backward">↓</button><button data-move="KeyQ" aria-label="Swim down">−</button></div>
-      <div class="dive-toast" id="dive-toast" role="status"></div>
       <button class="show-dive-ui" id="show-dive-ui">Show controls · H</button>
     `;
     document.body.appendChild(root);this.root=root;
+    const performanceReadout=document.createElement('p');performanceReadout.className='lab-stat';performanceReadout.id='world-performance';root.querySelector('.lab-view').appendChild(performanceReadout);
     const guide=document.createElement('dialog');guide.className='dive-help';guide.id='dive-guide';
     guide.innerHTML=`<h2>Sky to abyss.</h2><p>This is one continuous ocean. Ascend vertically into the air, descend along the continental slope, or choose a depth stop. The four habitats are places in the same world. Stop a journey anywhere and take control.</p><dl><dt>Ascend / Descend</dt><dd>Travel to the surface or the 1,400-metre trench</dd><dt>W A S D</dt><dd>Swim in the direction you look</dd><dt>Drag</dt><dd>Look around; wheel to zoom</dd><dt>Q / E</dt><dd>Swim down / up, through the waterline</dd><dt>Shift</dt><dd>Move faster</dd><dt>1 – 4</dt><dd>Travel to a habitat</dd><dt>G / R</dt><dd>World lab / new seed</dd><dt>F / P / H</dt><dd>Swim or drift / pause / hide controls</dd><dt>L</dt><dd>Override the automatic deep-water light</dd></dl><p>Weather remains active at every depth. Waves, rain and storms stir the upper ocean; their motion fades as you descend. Deep upwelling carries nutrients into a surface bloom. Trigger a seafloor tremor and watch its expanding wave from above or below.</p><p>On touchscreens, drag to look and use the swimming buttons. Desktop graphics are recommended; lower the quality if your device struggles.</p><p>Everything is generated here. Travel speeds and transport times are compressed for exploration. This is an artistic simulation, not a predictive oceanographic model.</p><p>Built on <a href="https://github.com/Token-Gremlin/natural-disasters" target="_blank" rel="noopener">ABYSSAL by Token-Gremlin</a>, preserving its FFT ocean, atmosphere and extreme weather. MIT licensed.</p><button id="close-dive-guide">Back to the water</button>`;
     document.body.appendChild(guide);this.guide=guide;
@@ -104,7 +103,7 @@ export class Expedition {
     const guideClose=document.createElement('button');guideClose.className='guide-close';guideClose.textContent='×';guideClose.setAttribute('aria-label','Close help');guideClose.autofocus=true;guideClose.onclick=()=>guide.close();guide.prepend(guideClose);
     $('dive-surface').onclick=()=>this.surface();$('dive-descend').onclick=()=>this.visit('deep');$('dive-lab-toggle').onclick=()=>this.toggleLab();
     $('close-world-lab').onclick=()=>{this.toggleLab(false);$('dive-lab-toggle').focus();};
-    $('begin-dive').onclick=()=>this.visit(this.world.habitat.id);$('surface-lab').onclick=()=>this.toggleLab(true);
+    $('begin-dive').onclick=()=>this.visit(this.world.habitat.id);
     $('return-sea-level').onclick=()=>this.surface();
     root.querySelectorAll('[data-lamp]').forEach(b=>b.onclick=()=>this.setLampMode(b.dataset.lamp));
     root.querySelectorAll('[data-lab-tab]').forEach((b,index)=>{
@@ -114,9 +113,9 @@ export class Expedition {
     $('journey-stop').onclick=()=>this.setSwim(true);
     $('float-waterline').onclick=()=>this.waterline();
     root.querySelectorAll('[data-depth]').forEach(b=>b.onclick=()=>b.dataset.depth==='vent'?this.visit('deep'):+b.dataset.depth===0?this.surface():this.travelTo(transectPose(+b.dataset.depth,this.world.recipe),`${(+b.dataset.depth).toLocaleString()} m`));
-    $('seafloor-tremor').onclick=()=>{this.world.tremor();this.toast('The seabed shifts. A wave is travelling to the surface.');};
+    $('seafloor-tremor').onclick=()=>this.world.tremor();
     root.querySelectorAll('[data-event]').forEach(b=>b.onclick=()=>this.triggerEvent(b.dataset.event));
-    $('clear-ocean-events').onclick=()=>{this.app.director.clearEvents();this.world.dynamics.pulseStrength=0;this.toast('Ocean events cleared.');};
+    $('clear-ocean-events').onclick=()=>{this.app.director.clearEvents();this.world.dynamics.pulseStrength=0;};
     $('dive-help-toggle').onclick=$('lab-help').onclick=()=>guide.showModal();$('close-dive-guide').onclick=()=>guide.close();
     guide.addEventListener('click',e=>{if(e.target===guide){const r=guide.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)guide.close();}});
     root.querySelectorAll('[data-site]').forEach(b=>b.onclick=()=>this.visit(b.dataset.site));
@@ -253,20 +252,19 @@ export class Expedition {
     if(type==='lightning'){this.app.sandbox.lightning();this.weatherMode='custom';this.syncDials();this.syncWeatherButtons();this.writeURL();}
     if(type==='waterspout')d.spawnWaterspout(x,z,26);
     if(type==='hurricane'){this.setWeather('storm');d.spawnHurricane(x,z,18);}
-    this.toast(`${type[0].toUpperCase()+type.slice(1)} active across the connected ocean.`);
   }
 
   async regenerate(seed,reset=true) {
     const id=this.world.habitat.id;
     const request=(this.pendingGeneration||0)+1;this.pendingGeneration=request;
-    this.toast('Growing the world…');$('dive-lab').setAttribute('aria-busy','true');
+    this.notice('Growing the world…');$('dive-lab').setAttribute('aria-busy','true');
     await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
     if(this.pendingGeneration!==request)return;
     try {
       this.world.generate(id,seed,this.world.settings);
       this.travel=null;$('dive-journey').hidden=true;this.constrain(this.app.camera.position);this.captureDrift();
-      this.syncLabels();this.syncDials();this.writeURL();this.toast(`World ${this.world.seed} generated · all four habitats`);
-    } catch(error){console.error('World generation failed',error);this.toast('That world could not be generated. Try a lower living cover.');}
+      this.syncLabels();this.syncDials();this.writeURL();this.notice('');
+    } catch(error){console.error('World generation failed',error);this.notice('That world could not be generated. Try a lower living cover.',true);}
     finally{this.app.discardNextFrameTiming=true;$('dive-lab').setAttribute('aria-busy','false');}
   }
 
@@ -373,9 +371,7 @@ export class Expedition {
   syncLabels() {
     const h=this.world.habitat;
     $('dive-title').textContent=h.name;$('dive-subtitle').textContent=h.subtitle;
-    $('dive-site-label').textContent=`${h.number} / ${h.id==='deep'?'THE MIDNIGHT ZONE':h.id==='blue'?'THE OPEN WATER':'THE SUNLIT ZONE'}`;
     this.root.querySelectorAll('[data-site]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.site===h.id)));
-    $('dive-status-text').textContent=`ONE OCEAN · SEED ${this.world.seed}`;
     $('world-stats').textContent=`SEED ${this.world.seed} · ${(this.world.stats.fish+this.world.stats.animals).toLocaleString()} ANIMALS · ${this.world.stats.forms} FORMS`;
     $('world-stats').dataset.forms=this.world.stats.forms;
     $('world-stats').dataset.animals=this.world.stats.fish+this.world.stats.animals;
@@ -447,12 +443,10 @@ export class Expedition {
     const atSite=depth>1&&dist<85&&Math.abs(a.camera.position.y-closest.eye[1])<45;
     $('dive-title').textContent=atSite?closest.name:zone.name;
     $('dive-subtitle').textContent=atSite?closest.subtitle:zone.subtitle;
-    $('dive-site-label').textContent=atSite?`${closest.number} / ${zone.label}`:zone.label;
     const neighbors=this.world.fauna.nearbySpecies;
     $('fauna-readout').textContent=neighbors.length?(atSurface?'Below · ':'Nearby · ')+neighbors.join(' · '):'';
     $('fauna-readout').dataset.count=this.world.fauna.visibleCount;
     this.root.querySelectorAll('[data-site]').forEach(b=>b.setAttribute('aria-pressed',String(atSite&&b.dataset.site===closest.id)));
-    $('dive-status-text').textContent=`${a.paused?'PAUSED':this.travel?(this.travel.ascending?'ASCENDING':'DESCENDING'):this.floatAtSurface?'FLOATING':a.cine.free?'FREE SWIM':'SLOW DRIFT'} · ONE OCEAN · SEED ${this.world.seed}`;
     if(this.travel){
       const t=this.travel;$('journey-label').textContent=`${t.ascending?'Ascending to':'Travelling to'} ${t.title}`;
       $('journey-progress').value=t.total>0?t.done/t.total:1;
@@ -483,13 +477,13 @@ export class Expedition {
   }
 
   async share() {
-    this.writeURL();try{await navigator.clipboard.writeText(location.href);this.toast('World link copied. Same seed, same ocean.');}
-    catch{this.toast('The world link is in your address bar. Copy it to share.');}
+    this.writeURL();try{await navigator.clipboard.writeText(location.href);this.notice('World link copied.');}
+    catch{this.notice('Copy the world link from your address bar.');}
   }
 
   photograph() {
-    this.app.render(0);const a=document.createElement('a');a.download=`abyssal-${Math.round(Math.max(0,-this.app.camera.position.y))}m-${this.world.seed}.png`;a.href=this.app.canvas.toDataURL('image/png');a.click();this.toast('Photograph saved without the controls.');
+    this.app.render(0);const a=document.createElement('a');a.download=`abyssal-${Math.round(Math.max(0,-this.app.camera.position.y))}m-${this.world.seed}.png`;a.href=this.app.canvas.toDataURL('image/png');a.click();
   }
 
-  toast(message) { $('dive-toast').textContent=message;$('dive-toast').classList.add('show');clearTimeout(this.toastTimer);this.toastTimer=setTimeout(()=>$('dive-toast').classList.remove('show'),2800); }
+  notice(message,error=false) { $('lab-feedback').textContent=message;$('lab-feedback').classList.toggle('error',error);clearTimeout(this.noticeTimer);if(error){this.toggleLab(true);this.selectLabTab('world');}else if(message)this.noticeTimer=setTimeout(()=>$('lab-feedback').textContent='',3500); }
 }

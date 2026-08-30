@@ -88,6 +88,13 @@ const VERT = /* glsl */ `
 ${OCEAN_COUPLING_GLSL}
 attribute vec3 color;
 attribute float aFlex;
+#ifdef ANIMAL_MOTION
+  #ifdef USE_INSTANCING
+    attribute vec4 aAnimalMotion;
+  #else
+    uniform vec4 uAnimalMotion;
+  #endif
+#endif
 #ifdef FAUNA
 attribute float aGlow;
 attribute float aPart;
@@ -110,16 +117,32 @@ uniform mat4 uViewProjNJ;
 uniform mat4 uPrevViewProjNJ;
 varying vec4 vClip;
 varying vec4 vPrev;
+float smoothSlope(float low,float high,float value){float t=clamp((value-low)/(high-low),0.0,1.0);return 6.0*t*(1.0-t)/(high-low);}
 void main() {
   vec3 p = position;
   vec3 n = normal;
+  float clock=uTime,effort=1.0,turn=0.0,feeding=0.0;
+  #ifdef ANIMAL_MOTION
+    #ifdef USE_INSTANCING
+      vec4 motion=aAnimalMotion;
+    #else
+      vec4 motion=uAnimalMotion;
+    #endif
+    clock=motion.x;effort=motion.y;turn=motion.z;feeding=motion.w;
+  #endif
   if (uMotion > 0.5 && uMotion < 1.5) {
     float tail = 1.0-smoothstep(-0.65,0.2,p.x);
-    p.z += sin(uTime*6.0+p.x*5.4)*0.12*tail;
+    float amplitude=.025+effort*.095,bend=sin(clock+p.x*5.4)*amplitude+turn*.045;
+    n.x-=n.z*(cos(clock+p.x*5.4)*5.4*amplitude*tail-bend*smoothSlope(-.65,.2,p.x));
+    p.z += bend*tail;
+    float fin=smoothstep(.16,.34,abs(p.z));
+    p.y+=sin(clock*.7+sign(p.z)*.6)*fin*.04*(.35+effort);
   }
   if (uMotion > 1.5 && uMotion < 2.5) {
     float wing = abs(p.x);
-    p.y += sin(uTime*1.6-wing*0.6)*wing*0.23;
+    float amplitude=.045+effort*.18,phase=clock-wing*.6;
+    n.x-=n.y*sign(p.x)*amplitude*(sin(phase)-wing*.6*cos(phase));
+    p.y += sin(phase)*wing*amplitude;
   }
   if (uMotion > 2.5 && uMotion < 3.5) {
     float pulse = sin(uTime*1.8);
@@ -127,55 +150,83 @@ void main() {
     p.y += pulse*0.05;
   }
   if (uMotion > 3.5 && uMotion < 4.5) {
-    p.y += sin(uTime*1.1+p.x*0.35)*(1.0-smoothstep(-7.0,0.0,p.x))*0.45;
+    float tail=1.0-smoothstep(-7.0,0.0,p.x),amplitude=.08+effort*.42,phase=clock+p.x*.35;
+    n.x-=n.y*amplitude*(cos(phase)*.35*tail-sin(phase)*smoothSlope(-7.0,0.0,p.x));
+    p.y += sin(phase)*tail*amplitude;
+  }
+  if (uMotion > 13.5 && uMotion < 14.5) {
+    // Paddle the turtle's flippers about their roots; the shell stays rigid.
+    float flipper=smoothstep(.90,2.1,abs(p.z));
+    float front=smoothstep(-1.1,-.3,p.x);
+    float bendSlope=sign(p.z)*smoothSlope(.90,2.1,abs(p.z));
+    n.z-=bendSlope*(n.y*sin(clock+front*.6)*(.06+effort*.40)+n.x*cos(clock+front*.6)*(.04+effort*.15));
+    p.y+=sin(clock+front*.6)*flipper*(.06+effort*.40);
+    p.x+=cos(clock+front*.6)*flipper*(.04+effort*.15);
   }
   #ifdef FAUNA
-    float animalPhase=aPhase;
-    #ifdef USE_INSTANCING
-      animalPhase+=instanceMatrix[3].x*.31+instanceMatrix[3].z*.27;
-    #endif
-    float clock=uTime+animalPhase;
+    clock+=aPhase;
     if(uMotion>4.5&&uMotion<5.5){
       float tail=1.0-smoothstep(-1.15,.3,p.x);
-      p.z+=sin(clock*4.3+p.x*3.8)*tail*.14;
-      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*3.1)*abs(p.z)*.09;
+      float amplitude=.018+effort*.12,bend=sin(clock+p.x*3.8)*amplitude+turn*.055;
+      n.x-=n.z*(cos(clock+p.x*3.8)*3.8*amplitude*tail-bend*smoothSlope(-1.15,.3,p.x))*(1.0-feeding*.6);
+      p.z+=bend*tail*(1.0-feeding*.6);
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*.7)*abs(p.z)*(.025+effort*.075);
     }
     if(uMotion>5.5&&uMotion<6.5){
-      float pulse=sin(clock*3.2);
-      p.yz*=1.0+pulse*.055*(1.0-smoothstep(.2,1.1,p.x));
-      if(aPart>2.5&&aPart<3.5){p.y+=sin(clock*3.0-p.x*3.2)*.11;p.z+=cos(clock*2.6-p.x*2.3)*.10;}
-      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*4.1+abs(p.z)*3.0)*abs(p.z)*.13;
+      float pulse=(1.0-cos(clock))*.5;
+      p.yz*=1.0-pulse*.10*(1.0-smoothstep(.2,1.1,p.x));
+      if(aPart>2.5&&aPart<3.5){
+        float arm=smoothstep(1.15,2.4,p.x);
+        p.y+=sin(clock-p.x*2.2)*.07*arm;p.z+=cos(clock-p.x*1.7)*.06*arm;
+      }
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*1.4-abs(p.z)*3.0)*abs(p.z)*.12;
     }
     if(uMotion>6.5&&uMotion<7.5){
-      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*2.8)*smoothstep(.40,.85,abs(p.z))*.12;
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock)*smoothstep(.40,.85,abs(p.z))*(.05+effort*.13);
       if(aPart>2.5&&aPart<3.5){
         float arm=length(p.xz),root=smoothstep(.29,.8,arm);
-        float softClock=uTime+sin(atan(p.z,p.x)*3.0)*.18;
-        p.y+=sin(softClock*1.5+arm*3.0)*.045*root;
-        p.xz*=1.0+sin(softClock*1.6)*.025*root;
+        float softClock=clock-aPhase+sin(atan(p.z,p.x)*3.0)*.18;
+        float armStrength=mix(.4+effort*.6,effort,uAnchored);
+        p.y+=sin(softClock+arm*3.0)*.045*root*armStrength;
+        p.xz*=1.0+sin(softClock)*.025*root*armStrength;
       }
     }
     if(uMotion>7.5&&uMotion<8.5){
       float tail=max(0.0,-p.x);
-      p.z+=sin(clock*2.0+p.x*2.2)*min(tail*.22,.65);
-      p.y+=cos(clock*1.3+p.x*1.6)*min(tail*.055,.12);
+      p.z+=(sin(clock+p.x*2.2)*(.25+effort*.75)+turn*.10)*min(tail*.22,.65);
+      p.y+=cos(clock*.65+p.x*1.6)*min(tail*.055,.12)*effort;
     }
     if(uMotion>8.5&&uMotion<9.5&&aPart>3.5&&aPart<4.5){
-      p.x+=sin(clock*3.2)*.07;
-      p.y+=max(0.0,cos(clock*3.2))*.065;
+      float tip=smoothstep(.50,1.1,abs(p.z))*(1.0-smoothstep(.38,.70,p.y));
+      p.x+=sin(clock)*.075*tip*effort;
+      p.y+=max(0.0,cos(clock))*.065*tip*effort;
     }
     if(uMotion>9.5&&uMotion<10.5){
-      p.y+=sin(clock*2.4+p.x*2.2)*(1.0-smoothstep(-1.2,.25,p.x))*.16;
-      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*2.3)*abs(p.z)*.13;
+      float tail=1.0-smoothstep(-1.2,.25,p.x),phase=clock+p.x*2.2,amplitude=.02+effort*.14;
+      n.x-=n.y*amplitude*(cos(phase)*2.2*tail-sin(phase)*smoothSlope(-1.2,.25,p.x));
+      p.y+=sin(phase)*tail*amplitude;
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock)*abs(p.z)*.06*effort;
     }
     if(uMotion>10.5&&uMotion<11.5){
-      p.x+=sin(clock*.6+p.y*1.8)*max(p.y-.3,0.0)*.05;
+      p.x+=sin(uTime*.6+p.y*1.8)*max(p.y-.3,0.0)*.05;
     }
-    if(uMotion>11.5){
-      if(aPart>.5&&aPart<1.5)p.y+=sin(clock*4.0+p.x*3.0)*max(-p.x,0.0)*.10;
-      if(aPart>3.5&&aPart<4.5){p.x+=sin(clock*5.1)*.04;p.y+=max(0.0,cos(clock*5.1))*.025;}
+    if(uMotion>11.5&&uMotion<12.5){
+      if(aPart>.5&&aPart<1.5)p.y+=(1.0-cos(clock))*.5*max(-p.x,0.0)*.14*effort;
+      if(aPart>3.5&&aPart<4.5){float root=smoothstep(.14,.4,abs(p.z));p.x+=sin(clock)*.04*root*effort;p.y+=max(0.0,cos(clock))*.025*root*effort;}
     }
-    if(aPart>4.5&&aPart<5.5)p.z+=sin(clock*.9+p.y)*.035;
+    if(uMotion>12.5&&uMotion<13.5){
+      // Sunfish propel themselves with the tall dorsal and anal fins.
+      if(aPart>1.5&&aPart<2.5){float tip=smoothstep(.72,2.1,abs(p.y)),amplitude=.12+effort*.32;n.y-=n.z*sin(clock)*amplitude*sign(p.y)*smoothSlope(.72,2.1,abs(p.y));p.z+=sin(clock)*tip*amplitude;}
+    }
+    if(uMotion>14.5&&uMotion<15.5){
+      // True seals sweep their hindquarters laterally; dolphins flex vertically.
+      float rear=1.0-smoothstep(-1.2,.25,p.x);
+      float phase=clock+p.x*1.8,amplitude=.025+effort*.18;
+      n.x-=n.z*amplitude*(cos(phase)*1.8*rear-sin(phase)*smoothSlope(-1.2,.25,p.x));
+      p.z+=sin(phase)*rear*amplitude;
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*.5)*abs(p.z)*.025;
+    }
+    if(aPart>4.5&&aPart<5.5)p.z+=sin(uTime*.6+p.y)*.018*smoothstep(.5,1.2,p.y);
     vGlow=aGlow;
     vTissue=aTissue;
   #endif
@@ -197,7 +248,9 @@ void main() {
   #ifdef FAUNA
     advection=1.0-uAnchored;
   #endif
-  if(uMotion>.5){wp.xz+=flow.xz*sin(uTime*.21+phase*.2)*2.2*advection;wp.y+=flow.y*cos(uTime*.32+phase)*.7*advection;}
+  #ifndef ANIMAL_MOTION
+    if(uMotion>.5){wp.xz+=flow.xz*sin(uTime*.21+phase*.2)*2.2*advection;wp.y+=flow.y*cos(uTime*.32+phase)*.7*advection;}
+  #endif
   wp.x += aFlex * (sin(uTime*(0.64+current*0.25)+phase) + sin(uTime*0.31+phase*0.7)*0.5) * current*1.45;
   wp.z += aFlex * sin(uTime*0.49+phase*1.13)*current*0.85;
   if(uKind>2.5&&uKind<3.5) {
@@ -393,8 +446,8 @@ export function waterMaterial(kind = 1, options = {}) {
     name: `underwater-${options.name || kind}`,
     glslVersion: THREE.GLSL3,
     vertexShader: VERT, fragmentShader: FRAG,
-    uniforms: { ...U, uKind: { value: kind }, uPattern: { value: options.pattern || 0 }, uMotion: { value: options.motion || 0 }, uGlow: { value: options.glow || 0 }, uOpacity: { value: options.opacity ?? 1 }, uAnchored:{value:options.anchored?1:0},uSkinKind:{value:options.skin??0} },
-    defines: options.fauna?{FAUNA:1}:{},
+    uniforms: { ...U, uKind: { value: kind }, uPattern: { value: options.pattern || 0 }, uMotion: { value: options.motion || 0 }, uGlow: { value: options.glow || 0 }, uOpacity: { value: options.opacity ?? 1 }, uAnchored:{value:options.anchored?1:0},uSkinKind:{value:options.skin??0},uAnimalMotion:{value:new THREE.Vector4(0,1,0,0)} },
+    defines: { ...(options.fauna?{FAUNA:1}:{}), ...(options.animalMotion?{ANIMAL_MOTION:1}:{}) },
     side: options.side ?? THREE.DoubleSide,
     transparent: options.transparent || false,
     depthWrite: options.depthWrite ?? !options.transparent,

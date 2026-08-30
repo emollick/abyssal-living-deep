@@ -49,8 +49,16 @@ function mergeParts(parts) {
 }
 
 export class Batch {
-  constructor(material) { this.material = material; this.parts = []; this.chunks=[]; this.vertices=0; }
+  constructor(material,colliders=null) { this.material = material; this.parts = []; this.chunks=[]; this.vertices=0;this.colliders=colliders; }
   add(g, color, rng, flex = null) {
+    if(this.colliders){
+      g.computeBoundingBox();const b=g.boundingBox,x=(b.min.x+b.max.x)/2,y=(b.min.y+b.max.y)/2,z=(b.min.z+b.max.z)/2;
+      const rx=(b.max.x-b.min.x)/2,ry=(b.max.y-b.min.y)/2,rz=(b.max.z-b.min.z)/2;
+      if(Math.max(rx,rz)>.6){
+        const feedingPoints=[[0,0],[.30,.15],[-.30,-.15]].map(([dx,dz])=>{const px=x+dx*rx,pz=z+dz*rz;return {x:px,y:highestSurfaceAt(g,px,pz,b.min.y),z:pz};});
+        this.colliders.push({x,y,z,rx:Math.max(.1,rx),ry:Math.max(.1,ry),rz:Math.max(.1,rz),feedingPoints});
+      }
+    }
     const count=g.attributes.position.count;
     if(this.vertices&&this.vertices+count>SCENERY_BATCH_VERTICES)this.flush();
     paintGeometry(g, color, rng, flex);
@@ -246,7 +254,7 @@ function addKelp(batch, x, y, z, height, rng, small = false) {
 export function createHabitatGeometry(habitat) {
   const rng = seeded(habitat.seed), group = new THREE.Group(); group.name = habitat.name;
   const density = habitat.life ?? 1, relief = habitat.relief ?? 1;
-  const rocks = new Batch(waterMaterial(1, { name: 'reef-limestone' }));
+  const rockColliders=[],rocks = new Batch(waterMaterial(1, { name: 'reef-limestone' }),rockColliders);
   const corals = new Batch(waterMaterial(2, { name: 'coral' }));
   const plants = new Batch(waterMaterial(3, { name: 'kelp' }));
   const brains = new Batch(waterMaterial(2, { name: 'brain-coral', pattern: 1 }));
@@ -410,5 +418,5 @@ export function createHabitatGeometry(habitat) {
   rocks.finish(group, 'Eroded limestone'); corals.finish(group, 'Coral colonies');
   brains.finish(group, 'Brain coral gardens');
   plants.finish(group,'Swaying forest');luminous.finish(group,'Tube-worm crowns');chimneys.finish(group,'Sulfide chimneys');
-  return { group, ventPositions };
+  return { group, ventPositions, rocks:rockColliders };
 }

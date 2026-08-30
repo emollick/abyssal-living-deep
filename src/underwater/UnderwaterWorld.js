@@ -137,7 +137,7 @@ export class UnderwaterWorld {
 
   generate(id, seed, input = this.settings) {
     const settings=normalizeGenerator(input);seed=parseSeed(seed,713);
-    const recipe={...settings,seed,worldSeed:seed},sites=new Map();
+    const recipe={...settings,seed,worldSeed:seed},sites=new Map(),worldRocks=[];
     // Population controls do not change the rocks or plants. Keep their meshes
     // and only replace animal populations when the terrain recipe is unchanged.
     const reuseScenery=this.root&&seed===this.seed&&['relief','life','height'].every(key=>settings[key]===this.recipe[key]);
@@ -147,20 +147,22 @@ export class UnderwaterWorld {
       if(!reuseScenery){root.name='One connected ocean';root.add(createOceanTerrain(recipe));}
       for(const base of HABITATS) {
         const habitat=connectedHabitat(base,seed,settings);
-        const next=reuseScenery?{group:this.sites.get(base.id).group,ventPositions:[]}:createHabitatGeometry(habitat);
+        const next=reuseScenery?{group:this.sites.get(base.id).group,ventPositions:[],rocks:this.sites.get(base.id).localRocks}:createHabitatGeometry(habitat);
         if(!reuseScenery){next.group.position.set(habitat.origin[0],0,habitat.origin[1]);root.add(next.group);}
-        const life=new MarineLife(habitat);
+        const rocks=(next.rocks||[]).map(r=>({...r,x:r.x+habitat.origin[0],z:r.z+habitat.origin[1],feedingPoints:r.feedingPoints.map(p=>({...p,x:p.x+habitat.origin[0],z:p.z+habitat.origin[1]}))}));
+        worldRocks.push(...rocks);
+        const life=new MarineLife(habitat,rocks);
         if(reuseScenery)staged.push(life.group);else next.group.add(life.group);
         if(next.ventPositions.length){
           const vents=next.ventPositions.map(v=>[v[0]+habitat.origin[0],v[1],v[2]+habitat.origin[1]]);
           root.add(this.makeParticles(habitat,vents,true));
         }
-        sites.set(base.id,{habitat,group:next.group,life});
+        sites.set(base.id,{habitat,group:next.group,life,localRocks:next.rocks||[]});
       }
       snow=reuseScenery?this.snow:this.makeParticles(recipe,[],false);
       if(!reuseScenery)root.add(snow);
       pelagic=createPelagicLife(recipe);staged.push(pelagic.group);
-      fauna=new OceanFauna(recipe);staged.push(fauna.group);
+      fauna=new OceanFauna(recipe,worldRocks);staged.push(fauna.group);
     } catch(error) {
       staged.forEach(disposeTree);if(!reuseScenery)disposeTree(root);
       throw error;
@@ -236,14 +238,18 @@ export class UnderwaterWorld {
     U.uClarity.value=this.settings.clarity;
     U.uBioStrength.value=this.settings.glow;
     camera.getWorldDirection(U.uDiveForward.value);
+    const flowState={mixing:this.dynamics.mixing,vortices:[U.uVortex0.value,U.uVortex1.value,U.uVortex2.value,U.uVortex3.value],solitons:[[U.uSoliton0.value,U.uSoliton0b.value],[U.uSoliton1.value,U.uSoliton1b.value]]};
+    const environment={diver:this.app.cine?.free?camera.position:null,flow:(p,t)=>flowAt(p,t+this.bornAt,w,this.settings,flowState)};
+    this.fauna.update(time-this.bornAt,camera.position,environment);
+    environment.hunters=this.fauna.hunters;
     for(const site of this.sites.values()){
       const [x,z]=site.habitat.origin;
       this.localCamera.set(camera.position.x-x,camera.position.y,camera.position.z-z);
-      site.life.update(time-this.bornAt,this.localCamera);
       site.group.visible=Math.hypot(camera.position.x-x,camera.position.z-z)<530&&Math.abs(camera.position.y-site.habitat.eye[1])<330;
+      environment.visible=site.group.visible;
+      site.life.update(time-this.bornAt,this.localCamera,environment);
     }
     this.pelagic.update(time-this.bornAt,camera.position);
-    this.fauna.update(time-this.bornAt,camera.position);
     this.root.traverse(o=>{if(o.material?.uniforms?.uPixelHeight)o.material.uniforms.uPixelHeight.value=this.app.renderHeight;});
   }
 

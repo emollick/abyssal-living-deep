@@ -33,7 +33,11 @@ The descent has overlapping animal communities. Around **200 metres**, lanternfi
 
 ![Anglerfish, octopuses, isopods and brittle stars in the midnight garden](docs/media/living-deep.jpg)
 
-The 25 added creature types have generated anatomy, seeded proportions and markings, and movement suited to their bodies: tail strokes, fin paddling, squid pulses, curling arms and walking legs. Continuous body surfaces, curved fins, recessed mouths, small eyes and procedural skin detail give them distinct silhouettes at more natural sizes. Small fish move away from nearby swimming hunters. Jellies and long drifting chains are sparse at the default settings.
+The 25 creature types have generated anatomy, seeded proportions and markings, and movement suited to their bodies. Fish turn and bank into their direction of travel; tail and fin strokes respond to swimming effort. Sunfish paddle with their tall fins, seals sweep their hindquarters sideways, and squid contract their mantles as they jet backward. Rays, turtles and the whale alternate stronger strokes with quieter gliding. Jellies and long drifting chains are sparse at the default settings.
+
+Schools keep space between neighbors, turn around large rocks, and scatter around nearby hunters or a swimming diver before regrouping. Reef fish approach feeding patches on the generated rock surfaces and pause with their heads lowered. Bottom dwellers move in short bouts, with crabs walking sideways and legs settling during pauses. The steering runs at a fixed time step, with smooth rendering between updates; pausing holds both animal positions and appendages. The camera does not disturb animals in Drift mode.
+
+The interface keeps the dive title, nearby animals and depth in view. Routine actions no longer produce pop-up messages. The seed and population count are in the lab, with performance details under **View & controls**.
 
 ## Procedural dials
 
@@ -88,7 +92,7 @@ The shallow habitats use wavelength-dependent sunlight, textured sediment, weath
 
 Travel speeds and transport times are compressed for exploration. Animal sizes are approximate, and these habitats combine species from different oceans. Anatomy, lighting and materials are procedural approximations, not scanned specimens. This is an artistic simulation, not an ecological, oceanographic or disaster-prediction model.
 
-Deep-water anatomy and broad habitat choices were informed by MBARI's profiles of [gulper eels](https://www.mbari.org/animal/whiptail-gulper-eel/), [flapjack octopuses](https://www.mbari.org/animal/flapjack-octopus/), [vampire squid](https://www.mbari.org/animal/vampire-squid/) and [anglerfish](https://www.mbari.org/animal/deep-sea-anglerfish/), and [NOAA's bioluminescence overview](https://oceanexplorer.noaa.gov/education/bioluminescence/). The generated populations and depth boundaries are composed for exploration; they are not distribution data. No source images or models are used by the app.
+Deep-water anatomy and broad habitat choices were informed by MBARI's profiles of [gulper eels](https://www.mbari.org/animal/whiptail-gulper-eel/), [flapjack octopuses](https://www.mbari.org/animal/flapjack-octopus/), [vampire squid](https://www.mbari.org/animal/vampire-squid/) and [anglerfish](https://www.mbari.org/animal/deep-sea-anglerfish/), and [NOAA's bioluminescence overview](https://oceanexplorer.noaa.gov/education/bioluminescence/). Movement references include NOAA's [harbor-seal anatomy](https://oceantoday.noaa.gov/sealanatomy/) and [parrotfish grazing](https://oceanservice.noaa.gov/facts/sand.html). Swimming speeds, encounter distances and feeding cycles are composed for exploration, as are the populations and depth boundaries; they are not measured behavior or distribution data. No source images or models are used by the app.
 
 ## Run locally
 
@@ -100,7 +104,7 @@ npm run dev
 ```
 
 ```sh
-npm test        # quality, terrain, journeys, coupled flow, fauna and generation checks
+npm test        # quality, terrain, journeys, flow, generation, anatomy and animal behavior
 npm run build  # static site in dist/
 npm run preview
 ```
@@ -140,6 +144,7 @@ The existing rendering pipeline remains in `src/core`, `src/ocean`, `src/sky`, `
 | `MarineLife.js` | Shoals, rays, turtles, whales and jellyfish |
 | `FaunaGeometry.js` | Generated anatomy, markings and light organs for 25 added creature types |
 | `OceanFauna.js` | Seeded animal communities, population dials, schooling, avoidance and terrain-following movement |
+| `AnimalMotion.js` | Fixed-step steering, neighborhood spacing, rock avoidance, encounters and movement-driven animation phases |
 | `UnderwaterMaterial.js` | Surface shading, caustics, absorption, fog and water ceiling |
 | `UnderwaterWorld.js` | World generation, light shafts, shadows, particles and render integration |
 | `Expedition.js` | World lab, sharing, exploration controls and habitat selection |

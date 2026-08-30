@@ -3,15 +3,16 @@ import { seeded, TAU, normalizeGenerator, parseSeed } from './WorldMath.js';
 import { oceanFloor, transectPose, SITE_ORIGINS } from './OceanDomain.js';
 import { creatureGeometry } from './FaunaGeometry.js';
 import { waterMaterial } from './UnderwaterMaterial.js';
+import { AnimalMotion } from './AnimalMotion.js';
 
 export const FAUNA = {
-  butterflyfish:{name:'Butterflyfish',motion:5,behavior:'school',size:.15,skin:0},
-  parrotfish:{name:'Parrotfish',motion:5,behavior:'school',size:.27,skin:0},
+  butterflyfish:{name:'Butterflyfish',motion:5,behavior:'forage',size:.15,skin:0},
+  parrotfish:{name:'Parrotfish',motion:5,behavior:'forage',size:.27,skin:0},
   reefshark:{name:'Reef sharks',motion:5,behavior:'cruise',size:.55,hunter:true,skin:4},
   tuna:{name:'Tuna',motion:5,behavior:'school',size:.49,hunter:true,skin:0},
-  sunfish:{name:'Ocean sunfish',motion:5,behavior:'hover',size:.60,skin:4},
+  sunfish:{name:'Ocean sunfish',motion:13,behavior:'hover',size:.60,skin:4},
   dolphin:{name:'Dolphins',motion:10,behavior:'cruise',size:.68,skin:4},
-  seal:{name:'Seals',motion:10,behavior:'cruise',size:.50,skin:4},
+  seal:{name:'Seals',motion:15,behavior:'cruise',size:.50,skin:4},
   lanternfish:{name:'Lanternfish',motion:5,behavior:'school',size:.105,skin:0},
   hatchetfish:{name:'Hatchetfish',motion:5,behavior:'school',size:.09,skin:0},
   dragonfish:{name:'Dragonfish',motion:8,behavior:'hover',size:.22,hunter:true,skin:5},
@@ -32,6 +33,15 @@ export const FAUNA = {
   seapen:{name:'Sea pens',motion:11,behavior:'settled',size:.46,benthic:true,skin:3},
 };
 
+// Exploration-scale swimming speeds and rhythms, not a measured animal model.
+const RHYTHMS={
+  butterflyfish:[.30,2.8],parrotfish:[.45,1.8],reefshark:[1.15,.85],tuna:[1.35,1.7],
+  sunfish:[.24,.55],dolphin:[1.55,.75],seal:[.90,.85],lanternfish:[.18,3.2],hatchetfish:[.13,3],
+  dragonfish:[.12,.65],anglerfish:[.065,.50],gulpereel:[.16,.65],squid:[.62,.6],
+  vampire:[.07,.28],flapjack:[.085,.4],octopus:[.05,.4],crab:[.085,.5],shrimp:[.13,1.5],
+  ventshrimp:[.026,.5],isopod:[.022,.35],cucumber:[.004,.1],
+};
+
 // Broad, overlapping depth communities rather than a hard scene switch.
 // Sizes approximate natural body lengths; abundance is composed for exploration,
 // not intended to estimate the density or geography of a real ecosystem.
@@ -49,11 +59,12 @@ export function communityAt(depth) {
 export function makeFaunaPopulation(input={}) {
   const recipe={...input,...normalizeGenerator(input),seed:parseSeed(input.seed,713)},seed=recipe.seed;
   const population=[],rng=seeded(seed+90217);
-  let serial=0;
+  let serial=0,schoolSerial=0;
   function add(type,amount,center,zone,spread=8,heading=0,cohort=0) {
     const spec=FAUNA[type];
     const factor=recipe.shoal*(spec.benthic?recipe.benthos:(spec.hunter?recipe.predators:1));
     const count=Math.round(amount*factor);
+    const school=schoolSerial++,schoolPhase=cohort||rng()*TAU;
     for(let i=0;i<count;i++){
       const first=i===0,angle=rng()*TAU,r=first?0:Math.sqrt(rng())*spread;
       let x=center[0]+Math.cos(angle)*r;
@@ -72,7 +83,11 @@ export function makeFaunaPopulation(input={}) {
       population.push({
         id:serial++,type,zone,benthic:!!spec.benthic,hunter:!!spec.hunter,
         x,y,z,
-        phase:first?0:rng()*TAU,cohort:cohort||rng()*TAU,
+        phase:first?0:rng()*TAU,cohort:schoolPhase,school,
+        anchorX:center[0],anchorY:center[1],anchorZ:center[2],behavior:spec.behavior,
+        maxSpeed:RHYTHMS[type]?.[0]??0,beat:RHYTHMS[type]?.[1]??0,
+        pursuer:type==='reefshark'||type==='tuna',reverse:spec.behavior==='jet',sideways:type==='crab',
+        radius:scale*(type==='sunfish'?.85:spec.benthic?.45:.50),turnRate:spec.behavior==='cruise'?.85:1.4,
         scale,variant:i%2,heading:heading+(rng()-.5)*.5,
         speed:(.72+rng()*.55)*(spec.behavior==='cruise'?1.4:1),
         orbit:spec.behavior==='school'?1.2:spec.behavior==='cruise'?7.0:.45,
@@ -135,84 +150,95 @@ export function makeFaunaPopulation(input={}) {
   return population;
 }
 
-export function faunaPose(animal,time,recipe,out={}) {
+function faunaPosition(animal,time,recipe,out={}) {
   const spec=FAUNA[animal.type],phase=animal.phase,t=time*animal.speed;
-  let x=animal.x,y=animal.y,z=animal.z,heading=animal.heading,roll=0,pitch=0;
+  let x=animal.x,y=animal.y,z=animal.z,feeding=0,activity=.5,stroke=t*2+phase;
   if(spec.behavior==='cruise'){
-    const a=t*.105+phase;
-    x+=Math.sin(a)*animal.orbit;z+=(Math.cos(a)-1)*animal.orbit*.46;
-    y+=Math.sin(t*.17+phase)*1.15;
-    heading=-Math.atan2(-Math.sin(a)*.46,Math.cos(a));
-    roll=Math.sin(a)*.09;
+    const a=t*.037+phase,r=animal.orbit*1.6;
+    x+=Math.sin(a)*r+Math.sin(a*.63)*1.3;z+=(Math.cos(a)-1)*r*.7;
+    y+=Math.sin(t*.065+phase)*(animal.type==='reefshark'?3.2:1.8);
   }else if(spec.behavior==='school'){
-    const a=t*.14+animal.cohort;
-    x+=Math.sin(a)*animal.orbit;z+=Math.cos(a)*animal.orbit*.67;
-    y+=Math.sin(t*.51+phase)*.08;
-    heading=-Math.atan2(-Math.sin(a)*2,Math.cos(a)*3);
+    const a=time*.052+animal.cohort,r=animal.type==='tuna'?5:1.7;
+    x+=(Math.sin(a)-Math.sin(animal.cohort))*r;
+    z+=(Math.cos(a*.81)-Math.cos(animal.cohort*.81))*r*.65;
+    y+=Math.sin(time*.18+animal.cohort)*.14+Math.sin(t*.37+phase)*.07;
+  }else if(spec.behavior==='forage'){
+    const cycle=(t*.025+phase/TAU)%1;
+    const ease=v=>{v=Math.max(0,Math.min(1,v));return v*v*(3-2*v);};
+    feeding=ease((cycle-.20)/.18)*(1-ease((cycle-.65)/.18));
+    const patch=animal.feedingPoint||{x:animal.x+Math.cos(animal.heading)*1.2,z:animal.z-Math.sin(animal.heading)*1.2};
+    const bed=patch.y??oceanFloor(patch.x,patch.z,recipe);
+    x+=(patch.x-animal.x)*feeding+Math.sin(t*.15+phase)*.7*(1-feeding);
+    z+=(patch.z-animal.z)*feeding+Math.cos(t*.11+phase)*.45*(1-feeding);
+    y+=(bed+Math.max(.16,animal.scale*.6)-y)*feeding;
+    activity=1-feeding*.85;
   }else if(spec.behavior==='jet'){
-    const cycle=t*.36+phase;
-    const burst=Math.sin(cycle)+Math.sin(cycle*2)*.18;
-    const range=Math.min(1.5,animal.scale*4);
-    x+=Math.cos(heading)*burst*range;z-=Math.sin(heading)*burst*range;
-    y+=Math.sin(cycle*.7)*animal.scale;roll=Math.sin(cycle)*.06;
+    const cycle=t*(animal.type==='shrimp'?2.4:1.7)+phase;
+    const a=(cycle-.8*Math.sin(cycle))*.07,range=Math.min(2.5,animal.scale*5);
+    x+=Math.sin(a)*range;z+=(Math.cos(a)-1)*range*.65;
+    y+=Math.sin(a*.7)*animal.scale*.4;stroke=cycle;activity=.2+.8*(1-Math.cos(cycle))*.5;
   }else if(spec.behavior==='hover'){
     x+=Math.sin(t*.16+phase)*animal.orbit;z+=Math.cos(t*.14+phase)*animal.orbit*.6;
-    y+=Math.sin(t*.21+phase)*animal.scale*.35;heading+=Math.sin(t*.09+phase)*.13;
-    roll=Math.sin(t*.24+phase)*.05;
+    y+=Math.sin(t*.21+phase)*animal.scale*.35;activity=.15;
   }else if(spec.behavior==='crawl'){
-    x+=Math.sin(t*.047+phase)*.75;z+=Math.cos(t*.033+phase)*.55;
-    heading+=Math.sin(t*.05+phase)*.18;
+    const cycle=(t+phase*3)/22,whole=Math.floor(cycle),u=Math.max(0,Math.min(1,((cycle-whole)-.22)/.52));
+    const progress=whole+u*u*(3-2*u),a=progress*.48+phase;
+    const reach=Math.min(.75,animal.maxSpeed*6);
+    x+=(Math.sin(a)-Math.sin(phase))*reach;z+=(Math.cos(a)-Math.cos(phase))*reach*.73;
+    activity=u>0&&u<1?6*u*(1-u):0;
   }
   const floor=oceanFloor(x,z,recipe);
-  if(animal.benthic){
-    const step=.55;
-    const sx=(oceanFloor(x+step,z,recipe)-oceanFloor(x-step,z,recipe))/(step*2);
-    const sz=(oceanFloor(x,z+step,recipe)-oceanFloor(x,z-step,recipe))/(step*2);
-    // Ground-bound animals follow the same terrain as the swimmer.
-    roll=Math.max(-.5,Math.min(.5,Math.atan(sx*Math.cos(heading)-sz*Math.sin(heading))));
-    pitch=Math.max(-.5,Math.min(.5,-Math.atan(sx*Math.sin(heading)+sz*Math.cos(heading))));
-    y=floor+.012;
-  }else{
+  if(animal.benthic)y=floor+.012;
+  else{
     y=Math.max(y,floor+Math.max(.32,animal.scale*1.2));
     y=Math.min(-2.5,y);
   }
-  Object.assign(out,{x,y,z,heading,roll,pitch});
+  Object.assign(out,{x,y,z,feeding,activity,stroke});
+  return out;
+}
+
+const nextPose={};
+export function faunaPose(animal,time,recipe,out={}) {
+  faunaPosition(animal,time,recipe,out);faunaPosition(animal,time+.04,recipe,nextPose);
+  const vx=(nextPose.x-out.x)/.04,vy=(nextPose.y-out.y)/.04,vz=(nextPose.z-out.z)/.04,horizontal=Math.hypot(vx,vz);
+  const heading=horizontal>.0001?-Math.atan2(vz,vx)+(animal.reverse?Math.PI:0)+(animal.sideways?Math.PI/2:0):animal.heading;
+  Object.assign(out,{vx,vy,vz,heading,pitch:Math.atan2(vy,Math.max(.025,horizontal))*.6-out.feeding*.55,roll:0});
   return out;
 }
 
 export class OceanFauna {
-  constructor(recipe) {
+  constructor(recipe,rocks=[]) {
     this.recipe={...recipe,...normalizeGenerator(recipe),seed:parseSeed(recipe.seed,713)};this.group=new THREE.Group();this.group.name='Depth communities';
-    this.population=makeFaunaPopulation(this.recipe);this.pools=[];this.poses=this.population.map(()=>({}));
+    this.population=makeFaunaPopulation(this.recipe);this.pools=[];
+    const feedingPoints=rocks.flatMap(rock=>(rock.feedingPoints||[]).map(p=>({...p,rock}))).filter(p=>p.y>oceanFloor(p.x,p.z,this.recipe)+.12);
+    for(const animal of this.population)if(animal.behavior==='forage'){
+      let nearest=null,distance=144;
+      for(const p of feedingPoints){const d=(p.x-animal.x)**2+(p.z-animal.z)**2;if(d<distance){distance=d;nearest=p;}}
+      if(nearest)animal.feedingPoint=nearest;
+    }
+    this.motion=new AnimalMotion(this.population,(a,t,out)=>faunaPose(a,t,this.recipe,out),{floor:(x,z)=>oceanFloor(x,z,this.recipe),rocks,perception:4});
+    this.poses=this.motion.poses;
     this.nearbySpecies=[];this.hunters=[];this.visibleCount=0;
     const types=[...new Set(this.population.map(a=>a.type))];
     for(const type of types)for(const variant of [0,1]){
       const members=this.population.filter(a=>a.type===type&&a.variant===variant);
       if(!members.length)continue;
       const spec=FAUNA[type],geometry=creatureGeometry(type,this.recipe.seed+type.length*7919+variant*313);
-      const material=waterMaterial(4,{name:type,fauna:true,motion:spec.motion,skin:spec.skin,anchored:!!spec.benthic});
+      const motion=new THREE.InstancedBufferAttribute(new Float32Array(members.length*4),4);motion.setUsage(THREE.DynamicDrawUsage);geometry.setAttribute('aAnimalMotion',motion);
+      const material=waterMaterial(4,{name:type,fauna:true,animalMotion:true,motion:spec.motion,skin:spec.skin,anchored:!!spec.benthic});
       const mesh=new THREE.InstancedMesh(geometry,material,members.length);
       mesh.name=spec.name;mesh.frustumCulled=false;mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.count=0;
-      this.group.add(mesh);this.pools.push({mesh,members,spec});
+      this.group.add(mesh);this.pools.push({mesh,members,spec,motion});
     }
     this.dummy=new THREE.Object3D();this.count=this.population.length;this.typeCount=types.length;
   }
 
-  update(time,cameraPosition) {
+  update(time,cameraPosition,environment={}) {
+    this.motion.advance(time,environment);
     this.hunters.length=0;
     for(const animal of this.population){
-      const p=faunaPose(animal,time,this.recipe,this.poses[animal.id]);
-      if(animal.hunter)this.hunters.push(p);
-    }
-    // Avoidance is part of the world, not an effect switched on by the camera.
-    for(const animal of this.population){
-      if(animal.hunter||FAUNA[animal.type].behavior!=='school')continue;
       const p=this.poses[animal.id];
-      for(const hunter of this.hunters){
-        const dx=p.x-hunter.x,dy=p.y-hunter.y,dz=p.z-hunter.z,d2=dx*dx+dy*dy+dz*dz;
-        if(d2<49&&d2>.01){const amount=(7-Math.sqrt(d2))*.24/Math.sqrt(d2);p.x+=dx*amount;p.z+=dz*amount;}
-      }
-      p.y=Math.max(p.y,oceanFloor(p.x,p.z,this.recipe)+animal.scale*1.7);
+      if(animal.hunter)this.hunters.push(p);
     }
     const nearest=new Map();this.visibleCount=0;
     for(const pool of this.pools){
@@ -221,11 +247,11 @@ export class OceanFauna {
         const p=this.poses[animal.id],distance=cameraPosition?Math.hypot(p.x-cameraPosition.x,p.y-cameraPosition.y,p.z-cameraPosition.z):0;
         if(distance>135)continue;
         const d=this.dummy;d.position.set(p.x,p.y,p.z);
-        d.rotation.set(p.pitch,p.heading,p.roll);d.scale.setScalar(animal.scale);d.updateMatrix();
-        pool.mesh.setMatrixAt(visible++,d.matrix);
+        d.rotation.set(0,p.heading,0);d.rotateZ(p.pitch);d.rotateX(p.roll);d.scale.setScalar(animal.scale);d.updateMatrix();
+        pool.motion.setXYZW(visible,p.stroke,p.effort,p.turn,p.feeding);pool.mesh.setMatrixAt(visible++,d.matrix);
         if(distance<65)nearest.set(animal.type,Math.min(nearest.get(animal.type)??Infinity,distance));
       }
-      pool.mesh.count=visible;pool.mesh.instanceMatrix.needsUpdate=true;this.visibleCount+=visible;
+      pool.mesh.count=visible;pool.mesh.instanceMatrix.needsUpdate=true;pool.motion.needsUpdate=true;this.visibleCount+=visible;
     }
     this.nearbySpecies=[...nearest].sort((a,b)=>a[1]-b[1]).slice(0,4).map(([type])=>FAUNA[type].name);
   }

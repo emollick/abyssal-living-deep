@@ -3,8 +3,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { paintGeometry, segment } from './ReefGeometry.js';
 import { waterMaterial } from './UnderwaterMaterial.js';
 import { seeded, TAU, floorHeight } from './WorldMath.js';
+import { AnimalMotion } from './AnimalMotion.js';
 
-const X = new THREE.Vector3(1, 0, 0), Z = new THREE.Vector3(0, 0, -1);
+const Z = new THREE.Vector3(0, 0, -1);
 const dummy = new THREE.Object3D(), direction = new THREE.Vector3();
 
 function merge(parts) {
@@ -182,13 +183,15 @@ export function jellyGeometry(rng,detail=1) {
 }
 
 export class MarineLife {
-  constructor(habitat) {
+  constructor(habitat,rocks=[]) {
     this.habitat=habitat; this.group=new THREE.Group();this.group.name='Marine life';
     this.rng=seeded(habitat.seed+407);this.animals=[];
     const rng=this.rng, multiplier=habitat.shoal??1;
     const deep=habitat.id==='deep',blue=habitat.id==='blue',kelp=habitat.id==='kelp';
     this.fishCount=Math.round((deep?0:blue?1050:kelp?520:610)*multiplier);
-    this.fish=new THREE.InstancedMesh(fishGeometry(),waterMaterial(4,{name:'schooling-fish',motion:1,glow:deep?0.12:0}),Math.max(1,this.fishCount));
+    this.origin=habitat.origin||[0,0];
+    this.fish=new THREE.InstancedMesh(fishGeometry(),waterMaterial(4,{name:'schooling-fish',motion:1,animalMotion:true,glow:deep?0.12:0}),Math.max(1,this.fishCount));
+    this.fishMotion=new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1,this.fishCount)*4),4);this.fishMotion.setUsage(THREE.DynamicDrawUsage);this.fish.geometry.setAttribute('aAnimalMotion',this.fishMotion);
     this.fish.count=this.fishCount;this.fish.frustumCulled=false;this.fish.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.group.add(this.fish);this.fishData=[];
     for(let i=0;i<this.fishCount;i++) {
@@ -202,10 +205,18 @@ export class MarineLife {
       else color.setHSL(0.105+rng()*0.025,0.48,0.70);
       this.fish.setColorAt(i,color);
     }
+    for(const [id,f] of this.fishData.entries())Object.assign(f,{id,behavior:'school',maxSpeed:.72+f.school*.035,radius:f.scale*.44,beat:3.8+f.phase,turnRate:2.1});
+    this.schoolMotion=new AnimalMotion(this.fishData,(f,time,out)=>{
+      const g=f.school,rate=.018+g*.002,a=time*rate+g*1.256,radius=12+g*3.3;
+      const x=Math.sin(a)*radius+f.ox,z=Math.cos(a)*radius+f.oz-8-g*4;
+      const bob=time*.23+f.phase*6+f.ox,base=blue?-42:kelp?-24:-24;
+      const y=Math.max(floorHeight(x,z,habitat)+.5,base-g*(blue?1.4:.45)+f.oy+Math.sin(bob)*.1);
+      Object.assign(out,{x:x+this.origin[0],y,z:z+this.origin[1],vx:Math.cos(a)*radius*rate,vy:Math.cos(bob)*.023,vz:-Math.sin(a)*radius*rate,heading:a,activity:.55,stroke:time*f.beat*TAU+f.phase*TAU});return out;
+    },{floor:(x,z)=>floorHeight(x-this.origin[0],z-this.origin[1],habitat),rocks,perception:1.5});
     if(multiplier>0) {
-      if(!deep&&!kelp)for(let i=0;i<2;i++)this.addAnimal('manta',mantaGeometry(),waterMaterial(4,{motion:2}),i);
-      if(kelp)for(let i=0;i<3;i++)this.addAnimal('turtle',turtleGeometry(),waterMaterial(4,{motion:1}),i);
-      if(blue)this.addAnimal('whale',whaleGeometry(),waterMaterial(4,{motion:4}),0);
+      if(!deep&&!kelp)for(let i=0;i<2;i++)this.addAnimal('manta',mantaGeometry(),waterMaterial(4,{motion:2,animalMotion:true}),i);
+      if(kelp)for(let i=0;i<3;i++)this.addAnimal('turtle',turtleGeometry(),waterMaterial(4,{motion:14,animalMotion:true}),i);
+      if(blue)this.addAnimal('whale',whaleGeometry(),waterMaterial(4,{motion:4,animalMotion:true}),0);
       if(deep||blue)for(let i=0;i<Math.round((deep?5:2)*Math.min(1.5,multiplier)*(habitat.jellies??.65));i++) {
         const mat=waterMaterial(5,{motion:3,glow:deep?1.1:0.6,opacity:0.8,transparent:true,depthWrite:false});
         this.addAnimal('jelly',jellyGeometry(rng),mat,i);
@@ -220,45 +231,44 @@ export class MarineLife {
     this.animals.push({mesh,type,index,phase:rng()*TAU,x:(rng()-0.5)*75,z:(rng()-0.5)*80-8,y:0.2+rng()*0.8,scale:type==='jelly'?.12+rng()*.20:1});
   }
 
-  update(time,cameraPosition) {
+  update(time,cameraPosition,environment={}) {
     const h=this.habitat, deep=h.id==='deep',blue=h.id==='blue',kelp=h.id==='kelp';
+    this.schoolMotion.advance(time,environment);
+    if(environment.visible===false)return;
     for(let i=0;i<this.fishCount;i++) {
-      const f=this.fishData[i],g=f.school;
-      const a=time*(0.07+g*0.008)+g*1.256+f.phase;
-      const radius=12+g*3.3;
-      let x=Math.sin(a)*radius+f.ox;
-      let z=Math.cos(a)*radius+f.oz-8-g*4;
-      const y=Math.max(floorHeight(x,z,h)+.5,(deep?-h.depth+11:blue?-42:kelp?-24:-24)-g*(blue?1.4:.45)+f.oy+Math.sin(time*.7+f.phase*6+f.ox)*.14);
-      const dx=x-cameraPosition.x,dz=z-cameraPosition.z,dy=y-cameraPosition.y;
-      const dist=Math.hypot(dx,dy,dz);
-      if(dist<5&&dist>0.01){x+=dx/dist*(5-dist)*0.7;z+=dz/dist*(5-dist)*0.7;}
-      dummy.position.set(x,y,z);
-      direction.set(Math.cos(a),Math.cos(time*0.7+f.phase*6+f.ox)*0.025,-Math.sin(a)).normalize();
-      dummy.rotation.set(0,-Math.atan2(direction.z,direction.x),Math.asin(direction.y));dummy.scale.setScalar(f.scale);dummy.updateMatrix();
+      const f=this.fishData[i],p=this.schoolMotion.poses[i];
+      dummy.position.set(p.x-this.origin[0],p.y,p.z-this.origin[1]);
+      dummy.rotation.set(0,p.heading,0);dummy.rotateZ(p.pitch);dummy.rotateX(p.roll);dummy.scale.setScalar(f.scale);dummy.updateMatrix();
       this.fish.setMatrixAt(i,dummy.matrix);
+      this.fishMotion.setXYZW(i,p.stroke,p.effort,p.turn,p.feeding);
     }
-    this.fish.instanceMatrix.needsUpdate=true;
+    this.fish.instanceMatrix.needsUpdate=true;this.fishMotion.needsUpdate=true;
     for(const a of this.animals) {
       const {mesh,type,index}=a;
       if(type==='manta') {
         const t=time*0.032+index*2.7;
         mesh.position.set(Math.sin(t)*24+7,blue?-33:-8-index*3,Math.cos(t)*17-13);
-        direction.set(Math.cos(t)*24,Math.cos(t*2)*0.25,-Math.sin(t)*17).normalize();
-        mesh.rotation.set(0,Math.atan2(-direction.x,-direction.z),0);mesh.scale.setScalar(index===0?0.58:0.40);
+        direction.set(Math.cos(t)*24,0,-Math.sin(t)*17).normalize();
+        mesh.quaternion.setFromUnitVectors(Z,direction);mesh.rotateZ(Math.sin(t)*.07);mesh.scale.setScalar(index===0?0.58:0.40);
       } else if(type==='turtle') {
         const t=time*0.04+index*2.3;
         mesh.position.set(Math.sin(t)*16, -15-index*3+Math.sin(t*2)*1.4,Math.cos(t)*19-4);
-        direction.set(Math.cos(t),Math.cos(t*2)*0.05,-Math.sin(t)).normalize();mesh.rotation.set(0,-Math.atan2(direction.z,direction.x),Math.asin(direction.y));
+        direction.set(Math.cos(t)*16,Math.cos(t*2)*2.8,-Math.sin(t)*19).normalize();
+        mesh.rotation.set(0,-Math.atan2(direction.z,direction.x),0);mesh.rotateZ(Math.asin(direction.y));mesh.rotateX(Math.sin(t)*.07);
         mesh.scale.setScalar(0.35+index*0.055);
       } else if(type==='whale') {
-        const t=time*0.022;
-        mesh.position.set(Math.sin(t)*25,-35+Math.sin(t*1.3)*2.5,-11+Math.cos(t)*4);
-        direction.set(Math.cos(t)*31,Math.cos(t*1.3)*2.5,-Math.sin(t)*4).normalize();
-        mesh.rotation.set(0.24+Math.sin(time*0.19)*0.10,-Math.atan2(direction.z,direction.x),Math.asin(direction.y));
+        const t=time*.018;
+        mesh.position.set(Math.sin(t)*36,-35+Math.sin(t*1.3)*2.5,-11+Math.cos(t)*20);
+        direction.set(Math.cos(t)*36,Math.cos(t*1.3)*3.25,-Math.sin(t)*20).normalize();
+        mesh.rotation.set(0,-Math.atan2(direction.z,direction.x),0);mesh.rotateZ(Math.asin(direction.y));mesh.rotateX(Math.sin(t)*.07);
         mesh.scale.setScalar(.74);
       } else if(type==='jelly') {
         mesh.position.set(a.x+Math.sin(time*0.07+a.phase)*2.5, -h.depth+5+a.y*23+Math.sin(time*0.23+a.phase)*1.3,a.z);
         mesh.scale.setScalar(a.scale);mesh.rotation.y=a.phase+time*0.018;
+      }
+      if(type!=='jelly'){
+        const glide=.25+.75*Math.pow(.5+.5*Math.sin(time*.19+a.phase),2);
+        mesh.material.uniforms.uAnimalMotion.value.set(time*(type==='whale'?.9:type==='manta'?1.4:1.7)+a.phase,glide,0,0);
       }
     }
   }
