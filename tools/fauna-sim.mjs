@@ -49,12 +49,23 @@ check(communityAt(600).types.includes('vampire')&&!communityAt(200).types.includ
 
 for(const seed of [0,713,1934512951,4294967295])for(const relief of [.2,1,2.2]){
   const r={...recipe,seed,relief},animals=makeFaunaPopulation(r);
+  for(const depth of [200,600,1000]){
+    const pose=transectPose(depth,r),camera=new THREE.PerspectiveCamera(56,16/9,.1,18);
+    camera.position.fromArray(pose.eye);camera.lookAt(...pose.look);camera.updateMatrixWorld();
+    const view=new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    for(const time of [0,17,120]){
+      const inView=new Set();
+      for(const animal of animals){const p=faunaPose(animal,time,r);if(view.containsPoint(new THREE.Vector3(p.x,p.y,p.z)))inView.add(animal.type);}
+      check(inView.size>=3,'At '+depth+' m, naturally sized animals must lie in the actual starting view, not merely nearby.');
+      if(depth===600)check(inView.has('vampire'),'The lower-twilight stop must frame its vampire squid at the correct depth.');
+    }
+  }
   for(const time of [0,17,120,10000]){
     let finite=true,clear=true,stable=true;
     for(const animal of animals){
       const p=faunaPose(animal,time,r),next=faunaPose(animal,time+.01,r);
       finite&&=Object.values(p).every(Number.isFinite);
-      clear&&=p.y>=oceanFloor(p.x,p.z,r)+.149&&p.y<=-2.49;
+      clear&&=p.y>=oceanFloor(p.x,p.z,r)+(animal.benthic?.011:.31)&&p.y<=-2.49;
       stable&&=Math.hypot(next.x-p.x,next.y-p.y,next.z-p.z)<.25;
     }
     check(finite,'Fauna poses stay finite across seeds and long-running clocks.');

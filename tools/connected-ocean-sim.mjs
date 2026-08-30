@@ -25,6 +25,7 @@ for(const seed of [0,713,1934512951,4294967295])for(const relief of [.2,1,2.2]) 
   }
   for(const from of sites)for(const to of sites){
     const route=routeBetween(new THREE.Vector3(...from.eye),to,recipe);
+    check(Math.hypot(...route.at(-1).map((v,i)=>v-to.eye[i]))<.001,'A journey must finish at the requested viewing position, including close to the seabed.');
     let finite=true,clear=true,continuous=true;
     for(let i=1;i<route.length;i++) {
       const a=route[i-1],b=route[i];

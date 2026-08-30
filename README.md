@@ -10,7 +10,7 @@ A procedural expansion of [ABYSSAL by Token-Gremlin](https://github.com/Token-Gr
 
 | Dive site | Landscape and life |
 | --- | --- |
-| Coral cathedral | Limestone arches and coral shelves; striped butterflyfish, parrotfish, reef sharks and manta rays above octopuses, crabs, sea stars and urchins. |
+| Coral cathedral | Weathered limestone shelves, coral colonies and sandy channels; striped butterflyfish, parrotfish, reef sharks and manta rays above octopuses, crabs, sea stars and urchins. |
 | The sunken forest | A seeded canopy of giant kelp, seals, silver shoals and turtles; crabs, octopuses, sea stars and urchins on the sandy floor. |
 | Into the blue | A continental drop-off, stone pinnacles, a passing humpback whale, dolphins, tuna, ocean sunfish and jetting squid. |
 | The midnight garden | Mineral chimneys, vent plumes and tube worms; anglerfish, gulper eels and flapjack octopuses above isopods, brittle stars, sea cucumbers and vent shrimp. |
@@ -29,7 +29,7 @@ The descent has overlapping animal communities. Around **200 metres**, lanternfi
 
 ![Anglerfish, octopuses, isopods and brittle stars in the midnight garden](docs/media/living-deep.jpg)
 
-The 25 added creature types have generated anatomy, seeded proportions and markings, and movement suited to their bodies: tail strokes, fin paddling, squid pulses, curling arms and walking legs. Small fish move away from nearby swimming hunters. Jellies and long drifting chains are sparse at the default settings.
+The 25 added creature types have generated anatomy, seeded proportions and markings, and movement suited to their bodies: tail strokes, fin paddling, squid pulses, curling arms and walking legs. Continuous body surfaces, curved fins, recessed mouths, small eyes and procedural skin detail give them distinct silhouettes at more natural sizes. Small fish move away from nearby swimming hunters. Jellies and long drifting chains are sparse at the default settings.
 
 ## Procedural dials
 
@@ -79,7 +79,9 @@ The waterline samples all three FFT cascades and live event displacement. Clear 
 
 Below the surface are a continuous seeded seabed, a steep canyon, cold-water colonies, drifting siphonophore chains, wavelength-dependent attenuation, wave-driven caustics, shadows, light shafts, marine snow, kelp, instanced schools and generated animals. Cloud-volume baking preserves every depth slice, and the night sky includes procedural stars and a moon. Everything is generated from JavaScript and GLSL. There are no downloaded textures, models, fonts or audio files. Repository screenshots are documentation only.
 
-Travel speeds and transport times are compressed for exploration. Some small animals are enlarged, and these habitats combine species from different oceans. This is an artistic simulation, not an ecological, oceanographic or disaster-prediction model.
+The shallow habitats use wavelength-dependent sunlight, textured sediment, weathered rock, branching coral and clustered kelp fronds. In the deep, paired dive lights reveal mineral chimneys, tube worms and small animals near the floor; the water beyond the lights is dark. Coral and tube worms do not emit light. Bioluminescence belongs to luminous animal organs and the surface bloom.
+
+Travel speeds and transport times are compressed for exploration. Animal sizes are approximate, and these habitats combine species from different oceans. Anatomy, lighting and materials are procedural approximations, not scanned specimens. This is an artistic simulation, not an ecological, oceanographic or disaster-prediction model.
 
 Deep-water anatomy and broad habitat choices were informed by MBARI's profiles of [gulper eels](https://www.mbari.org/animal/whiptail-gulper-eel/), [flapjack octopuses](https://www.mbari.org/animal/flapjack-octopus/), [vampire squid](https://www.mbari.org/animal/vampire-squid/) and [anglerfish](https://www.mbari.org/animal/deep-sea-anglerfish/), and [NOAA's bioluminescence overview](https://oceanexplorer.noaa.gov/education/bioluminescence/). The generated populations and depth boundaries are composed for exploration; they are not distribution data. No source images or models are used by the app.
 
@@ -126,7 +128,7 @@ The existing rendering pipeline remains in `src/core`, `src/ocean`, `src/sky`, `
 | `OceanDynamics.js` | Depth-dependent currents, upwelling, nutrient transport and seafloor pulses |
 | `OceanTerrain.js` | Continuous shelf and canyon, wall colonies and midwater life |
 | `WaterInterface.js` | Actual-wave probe and continuous air/water compositing |
-| `ReefGeometry.js` | Generated terrain, arches, coral, kelp, sponges and vents |
+| `ReefGeometry.js` | Generated terrain, reef shelves, coral, kelp, sponges and mineral chimneys |
 | `MarineLife.js` | Shoals, rays, turtles, whales and jellyfish |
 | `FaunaGeometry.js` | Generated anatomy, markings and light organs for 25 added creature types |
 | `OceanFauna.js` | Seeded animal communities, population dials, schooling, avoidance and terrain-following movement |

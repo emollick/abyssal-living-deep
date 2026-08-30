@@ -44,7 +44,7 @@ void main() {
     col+=vec3(0.24,0.36,0.27)*shaft*0.080*uDiveLight*facing*(1.0-uDiveNight);
   }
   float lampBeam=pow(max(dot(rd,uDiveForward),0.0),25.0)*uLamp;
-  col+=vec3(0.030,0.058,0.070)*lampBeam*(1.0-exp(-lengthRay*.026))*uDiveDeep;
+  col+=vec3(.016,.023,.026)*lampBeam*(1.0-exp(-lengthRay*.021))*uDiveDeep;
   outColor=vec4(col,1.0);outVelocity=data;
 }
 `;
@@ -98,7 +98,11 @@ void main(){
   vec2 p=gl_PointCoord*2.0-1.0;float r=dot(p,p);if(r>1.0)discard;
   float a=pow(1.0-r,uSmoke>0.5?2.5:1.5)*vAlpha;
   vec3 col=uSmoke>0.5?vec3(0.09,0.17,0.19):vec3(0.27,0.49,0.44)*(0.2+uDiveLight*0.8);
-  if(uDiveDeep>0.5&&uSmoke<0.5)col=vec3(0.08,0.47,0.51)*(0.7+sin(vPos.x*14.0)*0.3);
+  if(uDiveDeep>0.5&&uSmoke<0.5){
+    float beam=pow(max(dot(normalize(vPos-uCamPos),uDiveForward),0.0),6.0)*uLamp;
+    col=vec3(.59,.63,.63)*(.012+beam*1.5/(1.0+vDist*vDist*.018));
+    a*=.25+beam*.75;
+  }
   if(uSmoke>0.5)a*=0.5+noise3(vec3(p*4.0,uTime*0.2))*0.5;
   outColor=vec4(col,a);outVelocity=vec4(0.0,0.0,vDist,a);
 }
@@ -117,7 +121,9 @@ export class UnderwaterWorld {
     this.shadowTarget=new THREE.WebGLRenderTarget(1536,1536,{depthBuffer:true,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter});
     this.shadowTarget.depthTexture=new THREE.DepthTexture(1536,1536,THREE.UnsignedIntType);
     this.shadowCamera=new THREE.OrthographicCamera(-86,86,86,-86,1,260);
-    this.shadowMaterial=new THREE.MeshDepthMaterial();
+    this.diveShadowCamera=new THREE.PerspectiveCamera(78,1,.20,140);
+    this.shadowMaterial=new THREE.MeshDepthMaterial({side:THREE.DoubleSide});
+    this.shadowFrame=0;
     this.shadowDirection=new THREE.Vector3(9,9,9);
     this.shadowCenter=new THREE.Vector3(1e6,1e6,1e6);
     this.background=new FullScreenPass(BACKGROUND_FRAG,app.ocean.bind({...U}),{name:'submerged-sky'});
@@ -199,7 +205,8 @@ export class UnderwaterWorld {
     const depth=Math.max(0,-camera.position.y),deep=smooth(100,900,depth);
     const kelp=Math.exp(-((camera.position.x-150)**2+(camera.position.z-110)**2)/18000)*(1-smooth(40,110,depth));
     const reef=Math.exp(-((camera.position.x+140)**2+(camera.position.z-140)**2)/23000)*(1-smooth(40,110,depth));
-    U.uWaterTint.value.set(.004+kelp*.021+reef*.002,.060+kelp*.025+reef*.045,.13-kelp*.065+reef*.015).lerp(new THREE.Vector3(.001,.006,.016),deep);
+    U.uWaterTint.value.set(.004+kelp*.021+reef*.002,.060+kelp*.025+reef*.045,.13-kelp*.065+reef*.015).lerp(new THREE.Vector3(.00007,.00015,.00024),deep);
+    U.uWaterTint.value.multiplyScalar(Math.exp(-Math.max(0,depth-85)*.012));
     U.uExtinction.value.set(.027+kelp*.005,.012+kelp*.009+reef*.004,.009+kelp*.019+reef*.002).lerp(new THREE.Vector3(.031,.019,.015),deep);
     U.uDiveDeep.value=deep;
     U.uDiveNight.value=1-THREE.MathUtils.smoothstep(el,-0.13,0.07);
@@ -221,7 +228,10 @@ export class UnderwaterWorld {
 
   render(camera,target,volume=true) {
     const r=this.app.renderer;
-    if(camera.position.y>-200&&(this.shadowDirty||this.shadowDirection.distanceToSquared(U.uSunDir.value)>0.0004||this.shadowCenter.distanceToSquared(camera.position)>1600))this.renderShadow(camera);
+    const lampShadows=U.uLamp.value>.05&&(camera.position.y<-160||U.uDiveNight.value>.7);
+    this.shadowFrame++;
+    const shadowMoved=this.shadowCenter.distanceToSquared(camera.position)>(lampShadows?.10:1600);
+    if((camera.position.y>-220||lampShadows)&&(this.shadowDirty||Number(lampShadows)!==U.uUnderwaterShadowMode.value||shadowMoved||this.shadowDirection.distanceToSquared(U.uSunDir.value)>.0004||this.shadowFrame%(lampShadows?4:18)===0))this.renderShadow(camera,lampShadows);
     if(!this.composite||this.composite.width!==target.width||this.composite.height!==target.height){
       this.composite?.dispose();this.composite=makeRT(target.width,target.height,{count:2,name:'underwater-volume'});
     }
@@ -233,14 +243,19 @@ export class UnderwaterWorld {
     this.volume.render(r,this.composite);r.setRenderTarget(null);return this.composite;
   }
 
-  renderShadow(camera) {
-    const r=this.app.renderer,cam=this.shadowCamera;
+  renderShadow(camera,lamp=false) {
+    const r=this.app.renderer,cam=lamp?this.diveShadowCamera:this.shadowCamera;
     const center=new THREE.Vector3(camera.position.x,this.floor(camera.position.x,camera.position.z)+12,camera.position.z-18);
     const sun=U.uSunDir.value.clone();sun.y=Math.max(0.45,sun.y);sun.normalize();
-    cam.position.copy(center).addScaledVector(sun,120);cam.lookAt(center);cam.updateMatrixWorld();
+    if(lamp){
+      const right=new THREE.Vector3().crossVectors(U.uDiveForward.value,new THREE.Vector3(.0001,1,0)).normalize();
+      cam.position.copy(camera.position).addScaledVector(right,.75);cam.position.y+=.18;
+      cam.lookAt(center.copy(camera.position).addScaledVector(U.uDiveForward.value,30));
+    }else{cam.position.copy(center).addScaledVector(sun,120);cam.lookAt(center);}
+    cam.updateMatrixWorld();U.uUnderwaterShadowMode.value=lamp?1:0;
     U.uReefShadowMatrix.value.multiplyMatrices(cam.projectionMatrix,cam.matrixWorldInverse);
     const hidden=[];
-    this.root.traverse(o=>{if(o.isPoints||o.name==='Marine life'||o===this.pelagic.group||o===this.fauna.group){hidden.push([o,o.visible]);o.visible=false;}});
+    this.root.traverse(o=>{if(o.isPoints||o.name==='Marine life'||o===this.pelagic.group){hidden.push([o,o.visible]);o.visible=false;}});
     this.scene.overrideMaterial=this.shadowMaterial;
     r.setRenderTarget(this.shadowTarget);r.setClearColor(0xffffff,1);r.clear();r.render(this.scene,cam);
     this.scene.overrideMaterial=null;hidden.forEach(([o,v])=>o.visible=v);

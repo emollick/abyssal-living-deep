@@ -14,7 +14,7 @@ export function createOceanTerrain(recipe) {
   for(let z=-980;z<=420;z+=3)zs.push(z);
   zs.push(600,850,1300,1900,2600);
   const positions=[],colors=[],uv=[],index=[];
-  const sand=new THREE.Color('#c8c39f'),basalt=new THREE.Color('#384d57');
+  const sand=new THREE.Color('#b9b29a'),basalt=new THREE.Color('#85857a');
   for(let j=0;j<zs.length;j++)for(let i=0;i<xs.length;i++) {
     const x=xs[i],z=zs[j],y=oceanFloor(x,z,recipe),depth=-y;
     positions.push(x,y,z);uv.push(x*.01,z*.01);
@@ -34,7 +34,7 @@ export function createOceanTerrain(recipe) {
 
   const rng=seeded(recipe.seed+918);
   const stone=new Batch(waterMaterial(1,{name:'basalt-escarpment'}));
-  const polyps=new Batch(waterMaterial(2,{name:'cold-water-colonies',glow:.27}));
+  const polyps=new Batch(waterMaterial(2,{name:'cold-water-colonies'}));
   const rock=rockGeometry(recipe.seed);
   for(let i=0;i<160;i++) {
     const z=-210-rng()*435,x=(rng()-.5)*260;
@@ -78,7 +78,7 @@ export function createPelagicLife(recipe) {
     const pose=column?{eye:[0,-depth,-738]}:transectPose(depth,recipe);
     const a=rng()*TAU,r=8+rng()*22;
     const x=column?(rng()-.5)*24:pose.eye[0]+Math.cos(a)*r+8,z=column?-749+(rng()-.5)*15:pose.eye[2]+Math.sin(a)*r-12;
-    data.push({x,y:Math.max(-depth,oceanFloor(x,z,recipe)+5),z,phase:rng()*TAU,size:.4+rng()*1.25});
+    data.push({x,y:Math.max(-depth,oceanFloor(x,z,recipe)+5),z,phase:rng()*TAU,size:.14+rng()*.24});
   }
   group.add(jellies);jellies.frustumCulled=false;
   const chain=new Batch(waterMaterial(5,{name:'siphonophores',glow:.9,opacity:.7,transparent:true}));

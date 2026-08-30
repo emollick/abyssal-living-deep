@@ -5,35 +5,35 @@ import { creatureGeometry } from './FaunaGeometry.js';
 import { waterMaterial } from './UnderwaterMaterial.js';
 
 export const FAUNA = {
-  butterflyfish:{name:'Butterflyfish',motion:5,behavior:'school',size:.62},
-  parrotfish:{name:'Parrotfish',motion:5,behavior:'school',size:.75},
-  reefshark:{name:'Reef sharks',motion:5,behavior:'cruise',size:1.10,hunter:true},
-  tuna:{name:'Tuna',motion:5,behavior:'school',size:1.02,hunter:true},
-  sunfish:{name:'Ocean sunfish',motion:5,behavior:'hover',size:1.35},
-  dolphin:{name:'Dolphins',motion:10,behavior:'cruise',size:1.22},
-  seal:{name:'Seals',motion:10,behavior:'cruise',size:1.10},
-  lanternfish:{name:'Lanternfish',motion:5,behavior:'school',size:.66},
-  hatchetfish:{name:'Hatchetfish',motion:5,behavior:'school',size:.70},
-  dragonfish:{name:'Dragonfish',motion:8,behavior:'hover',size:1.05,hunter:true},
-  anglerfish:{name:'Anglerfish',motion:5,behavior:'hover',size:.93,hunter:true},
-  gulpereel:{name:'Gulper eels',motion:8,behavior:'hover',size:.74,hunter:true},
-  squid:{name:'Squid',motion:6,behavior:'jet',size:.88},
-  vampire:{name:'Vampire squid',motion:7,behavior:'hover',size:1.13},
-  flapjack:{name:'Flapjack octopuses',motion:7,behavior:'hover',size:.89},
-  octopus:{name:'Octopuses',motion:7,behavior:'crawl',size:.86,benthic:true},
-  crab:{name:'Crabs',motion:9,behavior:'crawl',size:.73,benthic:true},
-  shrimp:{name:'Midwater shrimp',motion:12,behavior:'jet',size:.66},
-  ventshrimp:{name:'Vent shrimp',motion:12,behavior:'crawl',size:.48,benthic:true},
-  starfish:{name:'Sea stars',motion:11,behavior:'settled',size:.55,benthic:true},
-  brittlestar:{name:'Brittle stars',motion:11,behavior:'settled',size:.67,benthic:true},
-  urchin:{name:'Sea urchins',motion:0,behavior:'settled',size:.70,benthic:true},
-  isopod:{name:'Giant isopods',motion:9,behavior:'crawl',size:.81,benthic:true},
-  cucumber:{name:'Sea cucumbers',motion:9,behavior:'crawl',size:.74,benthic:true},
-  seapen:{name:'Sea pens',motion:11,behavior:'settled',size:1.06,benthic:true},
+  butterflyfish:{name:'Butterflyfish',motion:5,behavior:'school',size:.15,skin:0},
+  parrotfish:{name:'Parrotfish',motion:5,behavior:'school',size:.27,skin:0},
+  reefshark:{name:'Reef sharks',motion:5,behavior:'cruise',size:.55,hunter:true,skin:4},
+  tuna:{name:'Tuna',motion:5,behavior:'school',size:.49,hunter:true,skin:0},
+  sunfish:{name:'Ocean sunfish',motion:5,behavior:'hover',size:.60,skin:4},
+  dolphin:{name:'Dolphins',motion:10,behavior:'cruise',size:.68,skin:4},
+  seal:{name:'Seals',motion:10,behavior:'cruise',size:.50,skin:4},
+  lanternfish:{name:'Lanternfish',motion:5,behavior:'school',size:.105,skin:0},
+  hatchetfish:{name:'Hatchetfish',motion:5,behavior:'school',size:.09,skin:0},
+  dragonfish:{name:'Dragonfish',motion:8,behavior:'hover',size:.22,hunter:true,skin:5},
+  anglerfish:{name:'Anglerfish',motion:5,behavior:'hover',size:.29,hunter:true,skin:5},
+  gulpereel:{name:'Gulper eels',motion:8,behavior:'hover',size:.20,hunter:true,skin:5},
+  squid:{name:'Squid',motion:6,behavior:'jet',size:.24,skin:1},
+  vampire:{name:'Vampire squid',motion:7,behavior:'hover',size:.23,skin:1},
+  flapjack:{name:'Flapjack octopuses',motion:7,behavior:'hover',size:.22,skin:1},
+  octopus:{name:'Octopuses',motion:7,behavior:'crawl',size:.36,benthic:true,skin:1},
+  crab:{name:'Crabs',motion:9,behavior:'crawl',size:.17,benthic:true,skin:2},
+  shrimp:{name:'Midwater shrimp',motion:12,behavior:'jet',size:.066,skin:2},
+  ventshrimp:{name:'Vent shrimp',motion:12,behavior:'crawl',size:.038,benthic:true,skin:2},
+  starfish:{name:'Sea stars',motion:11,behavior:'settled',size:.16,benthic:true,skin:3},
+  brittlestar:{name:'Brittle stars',motion:11,behavior:'settled',size:.13,benthic:true,skin:3},
+  urchin:{name:'Sea urchins',motion:0,behavior:'settled',size:.13,benthic:true,skin:3},
+  isopod:{name:'Giant isopods',motion:9,behavior:'crawl',size:.19,benthic:true,skin:2},
+  cucumber:{name:'Sea cucumbers',motion:9,behavior:'crawl',size:.26,benthic:true,skin:3},
+  seapen:{name:'Sea pens',motion:11,behavior:'settled',size:.46,benthic:true,skin:3},
 };
 
 // Broad, overlapping depth communities rather than a hard scene switch.
-// Some small animals are enlarged; abundance is composed for exploration,
+// Sizes approximate natural body lengths; abundance is composed for exploration,
 // not intended to estimate the density or geography of a real ecosystem.
 export const MIDWATER_COMMUNITIES = [
   {min:70,max:200,types:['tuna','squid','shrimp']},
@@ -75,7 +75,7 @@ export function makeFaunaPopulation(input={}) {
         phase:first?0:rng()*TAU,cohort:cohort||rng()*TAU,
         scale,variant:i%2,heading:heading+(rng()-.5)*.5,
         speed:(.72+rng()*.55)*(spec.behavior==='cruise'?1.4:1),
-        orbit:spec.behavior==='school'?3.0:spec.behavior==='cruise'?7.0:1.25,
+        orbit:spec.behavior==='school'?1.2:spec.behavior==='cruise'?7.0:.45,
       });
     }
   }
@@ -83,14 +83,14 @@ export function makeFaunaPopulation(input={}) {
     const origin=SITE_ORIGINS[id];
     add(type,count,[origin[0]+x,y,origin[1]+z],id,spread,heading);
   }
-  local('reef','butterflyfish',30,-7,-20,15,9);
-  local('reef','parrotfish',18,9,-22,10,9,Math.PI);
+  local('reef','butterflyfish',30,-4,-27,19,7);
+  local('reef','parrotfish',18,6,-27,16,7,Math.PI);
   local('reef','reefshark',3,-9,-16,-2,15);
   local('reef','octopus',5,-7,0,17,13);
   local('reef','crab',12,7,0,22,17);
   local('reef','starfish',24,-3,0,21,26);
   local('reef','urchin',21,12,0,9,23);
-  local('kelp','seal',4,-5,-12,15,17);
+  local('kelp','seal',4,-5,-21,15,17);
   local('kelp','crab',18,3,0,20,21);
   local('kelp','octopus',5,-7,0,12,20);
   local('kelp','starfish',26,-6,0,18,24);
@@ -101,19 +101,19 @@ export function makeFaunaPopulation(input={}) {
   local('blue','squid',9,6,-53,13,17,Math.PI);
   local('blue','reefshark',2,-15,-56,-12,18);
 
-  const bandDepths=[105,200,315,445,595,750,890,1000,1120,1250,1360];
+  const bandDepths=[105,200,315,445,600,750,890,1000,1120,1250,1360];
   for(const depth of bandDepths)for(const column of [false,true]){
     const pose=column?{eye:[0,-depth,-724],look:[0,-depth-6,-764]}:transectPose(depth,recipe);
     const dx=pose.look[0]-pose.eye[0],dz=pose.look[2]-pose.eye[2],n=Math.hypot(dx,dz);
     const forward=[dx/n,dz/n],right=[-forward[1],forward[0]];
     const types=communityAt(depth).types,zone=depth<200?'slope':depth<530?'upper-twilight':depth<930?'lower-twilight':'midnight';
     for(let k=0;k<types.length;k++){
-      const type=types[k],spec=FAUNA[type],side=(k-(types.length-1)/2)*6.2,distance=14+(k%2)*8;
+      const type=types[k],spec=FAUNA[type],side=(k-(types.length-1)/2)*1.8,distance=5.5+(k%2)*4.5;
       const x=pose.eye[0]+forward[0]*distance+right[0]*side;
       const z=pose.eye[2]+forward[1]*distance+right[1]*side;
-      const y=-depth-3+(k%3-1)*4.3;
-      const number=spec.behavior==='school'?11:type==='shrimp'?5:2;
-      add(type,number,[x,y,z],zone,5.5,k%2?Math.PI:0,depth*.01+k);
+      const y=type==='flapjack'?oceanFloor(x,z,recipe)+1.0:-depth-.9+(k%3-1)*1.05;
+      const number=spec.behavior==='school'?17:type==='shrimp'?7:1;
+      add(type,number,[x,y,z],zone,2.4,k%2?Math.PI:0,depth*.01+k);
     }
     if(!column&&depth>180){
       const y=oceanFloor(pose.eye[0]+9,pose.eye[2]-5,recipe);
@@ -121,15 +121,17 @@ export function makeFaunaPopulation(input={}) {
       add('brittlestar',5,[pose.eye[0]+6,y,pose.eye[2]-6],zone,9);
     }
   }
-  local('deep','anglerfish',3,7,-1421,16,10,Math.PI);
-  local('deep','gulpereel',3,-11,-1422,7,14);
-  local('deep','flapjack',4,-6,-1423,21,10);
-  local('deep','isopod',16,-4,0,21,22);
-  local('deep','crab',12,9,0,21,24);
-  local('deep','ventshrimp',42,0,0,14,30);
-  local('deep','brittlestar',23,-9,0,18,27);
-  local('deep','cucumber',16,5,0,20,22);
-  local('deep','seapen',19,-10,0,10,28);
+  const deepY=(x,z)=>oceanFloor(x,z+SITE_ORIGINS.deep[1],recipe);
+  local('deep','anglerfish',1,2,deepY(2,26)+3.6,26,5,Math.PI);
+  local('deep','gulpereel',1,7,deepY(7,18)+4.0,18,7);
+  local('deep','flapjack',2,-2,deepY(-2,28)+.8,28,5);
+  local('deep','isopod',5,-1,0,28,9);
+  local('deep','crab',8,4,0,24,15);
+  local('deep','ventshrimp',52,-8,0,14,8);
+  local('deep','ventshrimp',35,11,0,-9,7);
+  local('deep','brittlestar',27,-5,0,22,19);
+  local('deep','cucumber',12,5,0,24,15);
+  local('deep','seapen',17,-10,0,6,21);
   return population;
 }
 
@@ -144,17 +146,18 @@ export function faunaPose(animal,time,recipe,out={}) {
     roll=Math.sin(a)*.09;
   }else if(spec.behavior==='school'){
     const a=t*.14+animal.cohort;
-    x+=Math.sin(a)*3;z+=Math.cos(a)*2;
-    y+=Math.sin(t*.51+phase)*.25;
+    x+=Math.sin(a)*animal.orbit;z+=Math.cos(a)*animal.orbit*.67;
+    y+=Math.sin(t*.51+phase)*.08;
     heading=-Math.atan2(-Math.sin(a)*2,Math.cos(a)*3);
   }else if(spec.behavior==='jet'){
     const cycle=t*.36+phase;
     const burst=Math.sin(cycle)+Math.sin(cycle*2)*.18;
-    x+=Math.cos(heading)*burst*3.2;z-=Math.sin(heading)*burst*3.2;
-    y+=Math.sin(cycle*.7)*.72;roll=Math.sin(cycle)*.10;
+    const range=Math.min(1.5,animal.scale*4);
+    x+=Math.cos(heading)*burst*range;z-=Math.sin(heading)*burst*range;
+    y+=Math.sin(cycle*.7)*animal.scale;roll=Math.sin(cycle)*.06;
   }else if(spec.behavior==='hover'){
-    x+=Math.sin(t*.22+phase)*1.05;z+=Math.cos(t*.19+phase)*.8;
-    y+=Math.sin(t*.31+phase)*.55;heading+=Math.sin(t*.11+phase)*.22;
+    x+=Math.sin(t*.16+phase)*animal.orbit;z+=Math.cos(t*.14+phase)*animal.orbit*.6;
+    y+=Math.sin(t*.21+phase)*animal.scale*.35;heading+=Math.sin(t*.09+phase)*.13;
     roll=Math.sin(t*.24+phase)*.05;
   }else if(spec.behavior==='crawl'){
     x+=Math.sin(t*.047+phase)*.75;z+=Math.cos(t*.033+phase)*.55;
@@ -166,11 +169,11 @@ export function faunaPose(animal,time,recipe,out={}) {
     const sx=(oceanFloor(x+step,z,recipe)-oceanFloor(x-step,z,recipe))/(step*2);
     const sz=(oceanFloor(x,z+step,recipe)-oceanFloor(x,z-step,recipe))/(step*2);
     // Ground-bound animals follow the same terrain as the swimmer.
-    roll=Math.max(-.5,Math.min(.5,Math.atan(sx)));
-    pitch=Math.max(-.5,Math.min(.5,-Math.atan(sz)));
-    y=floor+.15;
+    roll=Math.max(-.5,Math.min(.5,Math.atan(sx*Math.cos(heading)-sz*Math.sin(heading))));
+    pitch=Math.max(-.5,Math.min(.5,-Math.atan(sx*Math.sin(heading)+sz*Math.cos(heading))));
+    y=floor+.012;
   }else{
-    y=Math.max(y,floor+Math.max(1.8,animal.scale*1.7));
+    y=Math.max(y,floor+Math.max(.32,animal.scale*1.2));
     y=Math.min(-2.5,y);
   }
   Object.assign(out,{x,y,z,heading,roll,pitch});
@@ -187,7 +190,7 @@ export class OceanFauna {
       const members=this.population.filter(a=>a.type===type&&a.variant===variant);
       if(!members.length)continue;
       const spec=FAUNA[type],geometry=creatureGeometry(type,this.recipe.seed+type.length*7919+variant*313);
-      const material=waterMaterial(4,{name:type,fauna:true,motion:spec.motion,anchored:!!spec.benthic});
+      const material=waterMaterial(4,{name:type,fauna:true,motion:spec.motion,skin:spec.skin,anchored:!!spec.benthic});
       const mesh=new THREE.InstancedMesh(geometry,material,members.length);
       mesh.name=spec.name;mesh.frustumCulled=false;mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.count=0;
       this.group.add(mesh);this.pools.push({mesh,members,spec});

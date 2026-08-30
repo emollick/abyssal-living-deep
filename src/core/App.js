@@ -187,7 +187,10 @@ export class App {
     const loop = (t) => {
       if (!this.running) return;
       requestAnimationFrame(loop);
-      const dtRaw = (t - this._lastT) / 1000;
+      // A deliberate world rebuild is CPU work between frames, not evidence
+      // that the GPU needs a lower rendering preset.
+      const dtRaw = this.discardNextFrameTiming ? 1 / 60 : (t - this._lastT) / 1000;
+      this.discardNextFrameTiming = false;
       this._lastT = t;
       const dt = Math.min(Math.max(dtRaw, 1e-4), 0.05);
       this.frameMs = dtRaw * 1000;

@@ -23,18 +23,19 @@ uniform float uClarity;
 uniform float uBioStrength;
 uniform sampler2D uReefShadow;
 uniform mat4 uReefShadowMatrix;
+uniform float uUnderwaterShadowMode;
 uniform float uSediment;
 uniform sampler2D uCausticSlope;
 uniform float uCausticSpan;
 
 float reefShadow(vec3 world,vec3 n) {
-  vec4 p=uReefShadowMatrix*vec4(world+n*0.045,1.0);
+  vec4 p=uReefShadowMatrix*vec4(world+n*(uUnderwaterShadowMode>.5?.004:.045),1.0);
   vec3 q=p.xyz/p.w*0.5+0.5;
   if(q.x<0.0||q.x>1.0||q.y<0.0||q.y>1.0||q.z>1.0)return 1.0;
   float light=0.0;
   for(int x=-1;x<=1;x++)for(int y=-1;y<=1;y++) {
     float d=textureLod(uReefShadow,q.xy+vec2(float(x),float(y))/1536.0,0.0).r;
-    light+=step(q.z-0.0013,d);
+    light+=step(q.z-(uUnderwaterShadowMode>.5?.000025:.0013),d);
   }
   return light/9.0;
 }
@@ -91,7 +92,9 @@ attribute float aFlex;
 attribute float aGlow;
 attribute float aPart;
 attribute float aPhase;
+attribute float aTissue;
 varying float vGlow;
+varying float vTissue;
 uniform float uAnchored;
 #endif
 varying vec3 vWorld;
@@ -144,8 +147,13 @@ void main() {
       if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*4.1+abs(p.z)*3.0)*abs(p.z)*.13;
     }
     if(uMotion>6.5&&uMotion<7.5){
-      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*2.8)*abs(p.z)*.28;
-      if(aPart>2.5&&aPart<3.5){p.y+=sin(clock*1.5+length(p.xz)*3.0)*.07;p.xz*=1.0+sin(clock*1.6)*.045;}
+      if(aPart>1.5&&aPart<2.5)p.y+=sin(clock*2.8)*smoothstep(.40,.85,abs(p.z))*.12;
+      if(aPart>2.5&&aPart<3.5){
+        float arm=length(p.xz),root=smoothstep(.29,.8,arm);
+        float softClock=uTime+sin(atan(p.z,p.x)*3.0)*.18;
+        p.y+=sin(softClock*1.5+arm*3.0)*.045*root;
+        p.xz*=1.0+sin(softClock*1.6)*.025*root;
+      }
     }
     if(uMotion>7.5&&uMotion<8.5){
       float tail=max(0.0,-p.x);
@@ -169,6 +177,7 @@ void main() {
     }
     if(aPart>4.5&&aPart<5.5)p.z+=sin(clock*.9+p.y)*.035;
     vGlow=aGlow;
+    vTissue=aTissue;
   #endif
   vLocal = p; vUv = uv; vColor = color;
   #ifdef USE_INSTANCING_COLOR
@@ -213,6 +222,8 @@ uniform float uPattern;
 uniform float uMotion;
 #ifdef FAUNA
 varying float vGlow;
+varying float vTissue;
+uniform float uSkinKind;
 #endif
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -224,6 +235,20 @@ varying vec4 vPrev;
 layout(location=0) out vec4 outColor;
 layout(location=1) out vec4 outVelocity;
 
+vec3 surfaceNormal(vec3 n,float height,float strength) {
+  vec3 dx=dFdx(vWorld),dy=dFdy(vWorld),r1=cross(dy,n),r2=cross(n,dx);
+  float determinant=dot(dx,r1);
+  vec3 gradient=sign(determinant)*(dFdx(height)*r1+dFdy(height)*r2);
+  return normalize(max(abs(determinant),.0000001)*n-gradient*strength);
+}
+float waterSpecular(vec3 n,vec3 v,vec3 l,float roughness,float f0) {
+  vec3 h=normalize(v+l);float nv=max(dot(n,v),.001),nl=max(dot(n,l),.001),nh=max(dot(n,h),.0);
+  float a=roughness*roughness,a2=a*a,d=nh*nh*(a2-1.0)+1.0;
+  float distribution=a2/(3.141593*d*d),k=(roughness+1.0)*(roughness+1.0)*.125;
+  float visibility=nv/(nv*(1.0-k)+k)*nl/(nl*(1.0-k)+k);
+  float fresnel=f0+(1.0-f0)*pow(1.0-max(dot(v,h),.0),5.0);
+  return min(5.0,distribution*visibility*fresnel/max(.004,4.0*nv*nl))*nl;
+}
 void main() {
   vec3 n = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);
   vec3 viewDir = normalize(uCamPos-vWorld);
@@ -231,69 +256,116 @@ void main() {
   float grain = fbm3(vWorld*2.1);
   float rough = noise3(vWorld*21.0);
   vec3 base = vColor;
+  float relief=0.0,roughness=.78,f0=.018;
   if (uKind < 0.5) {
-    float ripple = sin(vWorld.x*4.0+sin(vWorld.z*0.45)*2.1 + sin(vWorld.z*0.12)*3.0);
-    base *= 0.76+grain*0.25+ripple*0.08+rough*0.075;
-    n = normalize(n + vec3(cos(vWorld.x*4.0+sin(vWorld.z*0.45)*2.1)*0.13,0.0,0.025));
+    float resolved=1.0-smoothstep(.6,3.0,length(fwidth(vWorld))*130.0);
+    float mineral=noise3(vWorld*130.0),shallow=1.0-smoothstep(80.0,250.0,-vWorld.y);
+    float ripplePhase=vWorld.x*26.0+sin(vWorld.z*.65)*3.0+sin(vWorld.z*3.2)*.45;
+    float ripple=sin(ripplePhase)*(1.0-smoothstep(.75,3.0,fwidth(ripplePhase)));
+    base*=.68+grain*.38+mineral*resolved*.12+ripple*shallow*.045;
+    relief=ripple*shallow*.007+grain*.032+mineral*resolved*.001;
     float cliff=smoothstep(.30,.75,1.0-abs(n.y));
-    float layers=sin(vWorld.y*.36+fbm3(vWorld*.09)*3.4);
-    float seams=pow(abs(sin(vWorld.y*.15+noise3(vWorld*.12)*1.2)),24.0);
-    vec3 rock=vec3(.12,.175,.18)*(.68+grain*.55+layers*.13-seams*.34);
+    float layers=sin(vWorld.y*1.65+fbm3(vWorld*.12)*5.4);
+    float seams=pow(abs(sin(vWorld.y*.51+noise3(vWorld*.22)*2.2)),28.0);
+    vec3 rock=vec3(.18,.175,.155)*(.60+grain*.70+layers*.12-seams*.36);
     base=mix(base,rock,cliff);
+    relief+=cliff*(layers*.022+rough*.045-seams*.07);
   } else if (uKind < 1.5) {
-    float strata = sin(vWorld.y*5.0+grain*5.0)*0.04;
-    float pores=pow(noise3(vWorld*14.0),4.0);
-    base *= 0.57+grain*0.55+strata+rough*0.18-pores*0.35;
-    float encrust = smoothstep(0.58,0.76,fbm3(vWorld*0.45));
-    base = mix(base,base*vec3(0.46,0.72,0.57),encrust*0.45);
+    float strata=sin(vWorld.y*3.4+grain*6.0),pores=pow(noise3(vWorld*19.0),3.0);
+    float fracture=pow(abs(sin(vWorld.y*1.8+fbm3(vWorld*.6)*5.0)),22.0);
+    base*=.43+grain*.82+strata*.065+rough*.16-pores*.25-fracture*.14;
+    float encrust=smoothstep(.47,.75,fbm3(vWorld*.8));
+    base=mix(base,base*vec3(.64,.77,.49),encrust*.30*(1.0-smoothstep(80.0,180.0,-vWorld.y)));
+    if(uPattern>1.5){
+      float mineral=smoothstep(.44,.68,fbm3(vWorld*2.6));
+      base=mix(base,vec3(.39,.32,.18),mineral*.65);
+    }
+    relief=strata*.014+grain*.095+pores*.025-fracture*.055;
   } else if (uKind < 2.5) {
-    float polyp = pow(noise3(vWorld*27.0),4.0);
-    base *= 0.76+grain*0.35+polyp*0.5;
-    base = mix(base,vec3(0.90,0.82,0.59),polyp*0.3);
+    float polyp=pow(noise3(vWorld*47.0),3.0);
+    base*=.58+grain*.44+polyp*.31;
+    relief=polyp*.012+rough*.006;
     if(uPattern>0.5){
-      vec3 q=vWorld*7.4;
-      float ridge=abs(sin(q.x+sin(q.z+q.y)*1.7)+sin(q.z+sin(q.y+q.x)*1.6));
-      base*=0.32+smoothstep(0.05,0.38,ridge)*0.85;
+      vec3 q=vWorld*26.0;
+      float ridge=abs(sin(q.x+sin(q.z*.71+q.y*.52)*2.4+sin(q.z*1.72-q.x*.24)*.65));
+      float crest=smoothstep(.16,.72,ridge);
+      base*=.74+crest*.27;relief+=crest*.016;
     }
   } else if (uKind < 3.5) {
     float vein = pow(abs(sin(vUv.x*3.14159)),0.35);
-    base *= 0.7+vein*0.4+sin(vUv.y*89.0+vUv.x*14.0)*0.045;
+    base*=.65+vein*.35+sin(vUv.y*89.0+vUv.x*14.0)*.045;
+    relief=sin(vUv.y*100.0+vUv.x*7.0)*.0015;roughness=.48;
   } else if (uKind < 4.5) {
-    float scales = sin(vLocal.x*93.0)*sin(vLocal.y*121.0)*0.035;
-    base *= 1.0+scales;
+    roughness=.38;f0=.035;
+    float mottling=fbm3(vLocal*5.7);
+    base*=.77+mottling*.36;relief=noise3(vLocal*90.0)*.0008;
     if(uMotion>3.5&&uMotion<4.5)base*=0.78+fbm3(vLocal*1.4)*0.40;
+    #ifdef FAUNA
+      if(uSkinKind<.5){
+        vec2 q=vec2(vLocal.x*48.0,vLocal.y*63.0);q.x+=mod(floor(q.y),2.0)*.5;
+        vec2 cell=fract(q)-.5;float scaleRim=smoothstep(.37,.47,length(cell*vec2(.78,1.0)));
+        float resolved=1.0-smoothstep(.6,2.0,max(fwidth(q.x),fwidth(q.y)));
+        base*=1.0-scaleRim*resolved*.12;relief+=scaleRim*resolved*.0013;
+        roughness=.29+mottling*.12;
+      }else if(uSkinKind<1.5){
+        float dots=smoothstep(.55,.73,noise3(vLocal*105.0));
+        base*=.74+fbm3(vLocal*17.0)*.42-dots*.24;
+        relief+=noise3(vLocal*38.0)*.0016;roughness=.40;
+      }else if(uSkinKind<2.5){
+        base*=.76+noise3(vLocal*26.0)*.33;relief+=noise3(vLocal*47.0)*.002;roughness=.42;
+      }else if(uSkinKind<3.5){
+        relief+=noise3(vLocal*56.0)*.007;roughness=.75;
+      }else if(uSkinKind<4.5){
+        base*=.84+fbm3(vLocal*12.0)*.25;roughness=.42;f0=.018;
+      }else{
+        base*=.61+fbm3(vLocal*23.0)*.41;roughness=.61;f0=.01;
+        relief+=noise3(vLocal*35.0)*.002;
+      }
+      if(vTissue>.5&&vTissue<1.5){
+        float rays=pow(abs(sin(vUv.x*150.0)),9.0);
+        base*=.75+rays*.20;relief=rays*.0006;roughness=.47;
+      }
+      if(vTissue>1.5&&vTissue<2.5){relief=0.0;roughness=.13;f0=.045;}
+      if(vTissue>2.5){relief=0.0;roughness=.82;f0=.007;}
+    #endif
   }
-  // Small normal variation catches the light without a texture download.
-  if (uKind < 2.5) n = normalize(n + (vec3(noise3(vWorld*8.0),noise3(vWorld*8.0+4.1),noise3(vWorld*8.0+9.7))-0.5)*0.16);
+  n=surfaceNormal(n,relief,1.0);
   vec3 sun = normalize(vec3(uSunDir.x*0.6,max(0.45,uSunDir.y),uSunDir.z*0.6));
   float lambert = max(dot(n,sun),0.0);
   float hemi = n.y*0.5+0.5;
   float depth = max(0.0,-vWorld.y);
   float localDeep=smoothstep(100.0,700.0,depth);
   float sunlight = uDiveLight*exp(-depth*0.011)*(1.0-localDeep);
-  float shadow = depth>220.0 ? 1.0 : reefShadow(vWorld,n);
+  float shadow = depth>220.0||uUnderwaterShadowMode>.5 ? 1.0 : reefShadow(vWorld,n);
   vec3 spectrum=mix(vec3(1.0),uSunColor/max(max(uSunColor.r,uSunColor.g),max(uSunColor.b,0.001)),0.65);
-  float ambient = mix(0.42,0.040,localDeep) * mix(1.0,0.18,uDiveNight*(1.0-localDeep));
-  vec3 irradiance = vec3(0.66,0.80,0.77)*ambient*(0.65+hemi*0.6);
-  irradiance += vec3(1.0,0.97,0.78)*spectrum*lambert*sunlight*1.1*shadow;
-  irradiance += vec3(0.12,0.33,0.36)*sunlight*0.22;
-  irradiance += vec3(0.33,0.30,0.20)*sunlight*(1.0-hemi)*0.3;
-  if(uKind>1.5&&uKind<2.5)irradiance+=vec3(0.31,0.25,0.20)*spectrum*sunlight;
+  float ambient=mix(.20,.001,localDeep)*exp(-depth*.004)*mix(1.0,.10,uDiveNight*(1.0-localDeep));
+  vec3 irradiance=vec3(.48,.68,.75)*ambient*(.35+hemi*.9);
+  vec3 sunEnergy=spectrum*uDiveLight*exp(-vec3(.032,.014,.010)*depth/max(.35,sun.y))*(1.0-localDeep);
+  irradiance+=sunEnergy*lambert*1.65*shadow;
+  irradiance+=vec3(.09,.14,.10)*sunlight*(1.0-hemi)*.30;
+  if(uKind>1.5&&uKind<2.5)irradiance+=sunEnergy*(.24+max(.0,dot(-n,sun))*.15)+vec3(.38,.39,.34)*sunlight*.45;
   float ca = caustic(vWorld)*sunlight*max(0.0,n.y*0.75+0.25)*shadow;
-  irradiance += vec3(0.60,0.96,0.86)*ca*0.55;
+  irradiance+=sunEnergy*ca*.80;
   float fresnel = pow(1.0-max(dot(n,viewDir),0.0),3.0);
-  if (uKind > 2.5 && uKind < 3.5) irradiance += vec3(0.49,0.47,0.16)*sunlight*max(0.0,dot(-n,sun))*0.7;
-  float lampCone = pow(max(dot(-viewDir,uDiveForward),0.0),12.0);
-  float lamp = uLamp * lampCone * 13.0/(1.0+dist*dist*0.015);
-  irradiance += vec3(0.64,0.83,1.0)*lamp*max(0.1,dot(n,viewDir));
+  if(uKind>2.5&&uKind<3.5)irradiance+=vec3(.43,.43,.17)*sunlight*max(0.0,dot(-n,sun))*.85;
+  vec3 right=normalize(cross(uDiveForward,vec3(.0001,1.0,0.0)));
+  vec3 lampDirection=normalize(uCamPos+right*.75+vec3(0,.18,0)-vWorld);
+  vec3 fillDirection=normalize(uCamPos-right*.70+vec3(0,.12,0)-vWorld);
+  float lampCone=pow(max(dot(-viewDir,uDiveForward),0.0),5.0);
+  float lamp=uLamp*lampCone*7.5/(1.0+dist*dist*.045);
+  float lampShadow=uUnderwaterShadowMode>.5?reefShadow(vWorld,n):1.0;
+  irradiance+=vec3(.94,.96,1.0)*lamp*(max(.0,dot(n,lampDirection))*(.16+.84*lampShadow)+max(.0,dot(n,fillDirection))*.38);
   irradiance += vec3(0.4,0.6,0.8)*uAmbientFlash*exp(-depth*0.028)*(1.0-uDiveDeep);
   vec3 col = base*irradiance;
   // A modest photographic white balance recovers near-field coral color;
   // the distance-dependent water transmission still removes red in the blue.
-  col.r*=1.0+0.48*(1.0-uDiveDeep)*(1.0-exp(-dist*0.08));
+  col.r*=1.0+.12*(1.0-uDiveDeep)*(1.0-exp(-dist*.08));
   if (uKind > 3.5 && uKind < 4.5) {
-    float spec = pow(max(dot(n,normalize(sun+viewDir)),0.0),44.0);
-    col += vec3(0.65,0.90,0.93)*(spec*0.6+fresnel*0.14)*sunlight;
+    col+=sunEnergy*waterSpecular(n,viewDir,sun,roughness,f0)*shadow;
+    col+=vec3(.93,.96,1.0)*waterSpecular(n,viewDir,lampDirection,roughness,f0)*lamp*lampShadow;
+    #ifdef FAUNA
+      if(vTissue>.5&&vTissue<1.5)col+=base*(sunEnergy*max(.0,dot(-n,sun))*.32+lamp*max(.0,dot(-n,viewDir))*.08);
+    #endif
   }
   float bio = uGlow*uBioStrength*(0.24+uDiveNight*(1.0-localDeep)*1.6+localDeep*1.4);
   if (uKind > 4.5) {
@@ -321,7 +393,7 @@ export function waterMaterial(kind = 1, options = {}) {
     name: `underwater-${options.name || kind}`,
     glslVersion: THREE.GLSL3,
     vertexShader: VERT, fragmentShader: FRAG,
-    uniforms: { ...U, uKind: { value: kind }, uPattern: { value: options.pattern || 0 }, uMotion: { value: options.motion || 0 }, uGlow: { value: options.glow || 0 }, uOpacity: { value: options.opacity ?? 1 }, uAnchored:{value:options.anchored?1:0} },
+    uniforms: { ...U, uKind: { value: kind }, uPattern: { value: options.pattern || 0 }, uMotion: { value: options.motion || 0 }, uGlow: { value: options.glow || 0 }, uOpacity: { value: options.opacity ?? 1 }, uAnchored:{value:options.anchored?1:0},uSkinKind:{value:options.skin??0} },
     defines: options.fauna?{FAUNA:1}:{},
     side: options.side ?? THREE.DoubleSide,
     transparent: options.transparent || false,

@@ -29,10 +29,20 @@ export function oceanFloor(x, z, recipe = {}) {
 
 export function connectedHabitat(base, seed, settings = {}) {
   const origin = SITE_ORIGINS[base.id];
+  const eye=[base.eye[0]+origin[0],base.eye[1],base.eye[2]+origin[1]];
+  const look=[base.look[0]+origin[0],base.look[1],base.look[2]+origin[1]];
+  if(base.id==='reef'||base.id==='kelp'){
+    eye[1]=oceanFloor(eye[0],eye[2],{...settings,seed})+(base.id==='reef'?4.3:6.5);
+    look[1]=oceanFloor(look[0],look[2],{...settings,seed})+(base.id==='reef'?4.0:10.0);
+  }
+  if(base.id==='deep'){
+    eye[1]=oceanFloor(eye[0],eye[2],{...settings,seed})+3.2;
+    look[2]=origin[1]+10;
+    look[1]=oceanFloor(look[0],look[2],{...settings,seed})+1.0;
+  }
   return { ...base, ...settings, seed: (seed + ({reef:0, kelp:5106, blue:278, deep:81304}[base.id])) >>> 0,
     worldSeed: seed, connected: true, origin,
-    eye: [base.eye[0] + origin[0], base.eye[1], base.eye[2] + origin[1]],
-    look: [base.look[0] + origin[0], base.look[1], base.look[2] + origin[1]],
+    eye,look,
   };
 }
 
@@ -89,12 +99,15 @@ export function routeBetween(from, destination, recipe = {}) {
   // Sample the segments against the actual seeded terrain. Lifting a waypoint
   // before travel, rather than snapping the camera during it, avoids cliff cuts.
   const safe = [points[0]];
+  const arrivalClearance=clamp(to[1]-oceanFloor(to[0],to[2],recipe),1.6,5);
   for (let i = 1; i < points.length; i++) {
     const a = points[i-1], b = points[i];
     const steps = Math.max(1, Math.ceil(Math.hypot(...b.map((v,j)=>v-a[j])) / 22));
     for (let n = 1; n <= steps; n++) {
       const t=n/steps, p=b.map((v,j)=>a[j]+(v-a[j])*t);
-      p[1]=Math.max(p[1],oceanFloor(p[0],p[2],recipe)+5);
+      const remaining=Math.hypot(p[0]-to[0],p[1]-to[1],p[2]-to[2]);
+      const clearance=arrivalClearance+(5-arrivalClearance)*smooth(0,65,remaining);
+      p[1]=Math.max(p[1],oceanFloor(p[0],p[2],recipe)+clearance);
       safe.push(p);
     }
   }

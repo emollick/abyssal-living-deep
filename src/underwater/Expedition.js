@@ -57,7 +57,7 @@ export class Expedition {
       <div class="dive-status"><b></b><span id="dive-status-text">LIVING WORLD · SEED 713</span></div>
       <div class="dive-journey" id="dive-journey" hidden><span id="journey-label"></span><button id="journey-stop">Stop here</button><progress id="journey-progress" max="1" value="0" aria-label="Journey progress"></progress></div>
       <section class="dive-caption" aria-label="Current dive site"><div class="dive-eyebrow" id="dive-site-label">01 / THE SUNLIT ZONE</div><h1 id="dive-title">Coral cathedral</h1><p id="dive-subtitle">A world beneath the waves.</p><div class="dive-fauna" id="fauna-readout" aria-label="Nearby animal life"></div></section>
-      <div class="dive-depth"><strong id="dive-depth-value">13.0</strong> m<small id="depth-reference">BELOW THE SURFACE</small><nav class="depth-stops" aria-label="Depth stops">${[[0,'Surface'],[200,'Twilight'],[600,'Lower twilight'],[1000,'Midnight'],[1419,'The abyss']].map(([d,l])=>`<button data-depth="${d}" aria-label="Travel to ${d===0?'the surface':`${d} metres`}"><i></i><span>${d===0?'0':d.toLocaleString()}<small>${l}</small></span></button>`).join('')}</nav></div>
+      <div class="dive-depth"><strong id="dive-depth-value">13.0</strong> m<small id="depth-reference">BELOW THE SURFACE</small><nav class="depth-stops" aria-label="Depth stops">${[[0,'Surface'],[200,'Twilight'],[600,'Lower twilight'],[1000,'Midnight'],['vent','Vent field']].map(([d,l])=>`<button data-depth="${d}" aria-label="Travel to ${d===0?'the surface':d==='vent'?'the vent field':`${d} metres`}"><i></i><span>${d===0?'0':d==='vent'?'≈1,400':d.toLocaleString()}<small>${l}</small></span></button>`).join('')}</nav></div>
       <footer class="dive-bottom">
         <nav class="dive-sites" aria-label="Dive sites">${HABITATS.map(h=>`<button class="dive-site" data-site="${h.id}" aria-label="Visit ${h.name}" aria-pressed="${h.id==='reef'}"><span class="site-number">${h.number}</span><span class="site-name">${h.short}</span></button>`).join('')}</nav>
         <div class="dive-transport"><div class="dive-transport-buttons">
@@ -74,7 +74,7 @@ export class Expedition {
         <div class="lab-button-row"><button id="new-seed" class="lab-quiet">↻ New seed</button><button id="share-world" class="lab-quiet">Copy world link</button></div>
         <h3>SHAPE & LIFE</h3><div id="generator-dials"></div>
         <h3>ANIMAL COMMUNITIES</h3><div id="fauna-dials"></div><p class="lab-note">Animal abundance scales the whole population. Hunters, bottom dwellers and jellies shape its balance. Nearby animals are named beside the dive title.</p>
-        <details class="lab-more"><summary>Life by depth</summary><p class="lab-note"><strong>Reef & forest</strong><br>Butterflyfish, parrotfish, sharks and seals; octopuses, crabs, sea stars and urchins on the bottom.</p><p class="lab-note"><strong>Open water</strong><br>Whales, dolphins, tuna, sunfish, rays and squid.</p><p class="lab-note"><strong>Twilight</strong><br>Lanternfish and hatchetfish give way to vampire squid, dragonfish and midwater shrimp.</p><p class="lab-note"><strong>Midnight & seafloor</strong><br>Anglerfish, gulper eels and flapjack octopuses above isopods, brittle stars, sea cucumbers, sea pens and vent shrimp.</p><p class="lab-note">Some small animals are enlarged. These habitats combine species from different oceans for exploration.</p></details>
+        <details class="lab-more"><summary>Life by depth</summary><p class="lab-note"><strong>Reef & forest</strong><br>Butterflyfish, parrotfish, sharks and seals; octopuses, crabs, sea stars and urchins on the bottom.</p><p class="lab-note"><strong>Open water</strong><br>Whales, dolphins, tuna, sunfish, rays and squid.</p><p class="lab-note"><strong>Twilight</strong><br>Lanternfish and hatchetfish give way to vampire squid, dragonfish and midwater shrimp.</p><p class="lab-note"><strong>Midnight & seafloor</strong><br>Anglerfish, gulper eels and flapjack octopuses above isopods, brittle stars, sea cucumbers, sea pens and vent shrimp.</p><p class="lab-note">Animal sizes are approximate. These habitats combine species from different oceans for exploration.</p></details>
         <h3>THROUGH THE WATER</h3><div id="water-dials"></div>
         <h3>FROM THE DEEP</h3><div id="deep-dials"></div><button id="seafloor-tremor" class="lab-button lab-wide">Trigger a seafloor tremor</button><p class="lab-note">Deep upwelling feeds a green surface bloom, luminous at night. A tremor stirs the bottom and sends a wave out across the sea.</p><p class="lab-stat" id="coupling-status"></p>
         <h3>WEATHER ABOVE</h3><div class="lab-weather">${[['day','Day'],['dusk','Dusk'],['storm','Storm'],['night','Night']].map(([id,label])=>`<button data-weather="${id}" aria-pressed="${id==='day'}">${label}</button>`).join('')}</div><div id="weather-dials"></div>
@@ -96,7 +96,7 @@ export class Expedition {
     $('dive-surface').onclick=()=>this.surface();$('dive-descend').onclick=()=>this.visit('deep');$('dive-lab-toggle').onclick=()=>this.toggleLab();
     $('journey-stop').onclick=()=>this.setSwim(true);
     $('float-waterline').onclick=()=>this.waterline();
-    root.querySelectorAll('[data-depth]').forEach(b=>b.onclick=()=>+b.dataset.depth===0?this.surface():this.travelTo(transectPose(+b.dataset.depth,this.world.recipe),`${(+b.dataset.depth).toLocaleString()} m`));
+    root.querySelectorAll('[data-depth]').forEach(b=>b.onclick=()=>b.dataset.depth==='vent'?this.visit('deep'):+b.dataset.depth===0?this.surface():this.travelTo(transectPose(+b.dataset.depth,this.world.recipe),`${(+b.dataset.depth).toLocaleString()} m`));
     $('seafloor-tremor').onclick=()=>{this.world.tremor();this.toast('The seabed shifts. A wave is travelling to the surface.');};
     root.querySelectorAll('[data-event]').forEach(b=>b.onclick=()=>this.triggerEvent(b.dataset.event));
     $('clear-ocean-events').onclick=()=>{this.app.director.clearEvents();this.world.dynamics.pulseStrength=0;this.toast('Ocean events cleared.');};
@@ -241,7 +241,7 @@ export class Expedition {
       this.travel=null;$('dive-journey').hidden=true;this.constrain(this.app.camera.position);this.captureDrift();
       this.syncLabels();this.syncDials();this.writeURL();this.toast(`World ${this.world.seed} generated · all four habitats`);
     } catch(error){console.error('World generation failed',error);this.toast('That world could not be generated. Try a lower living cover.');}
-    finally{$('dive-lab').setAttribute('aria-busy','false');}
+    finally{this.app.discardNextFrameTiming=true;$('dive-lab').setAttribute('aria-busy','false');}
   }
 
   newSeed() { const a=new Uint32Array(1);crypto.getRandomValues(a);this.regenerate(a[0]%1000000); }
@@ -377,10 +377,10 @@ export class Expedition {
     U.uLamp.value=this.lampMode==='auto'?smooth(150,380,depth):this.lampMode==='on'?1:0;
     a.cine.freeSpeed=7+smooth(40,400,depth)*18+(1-smooth(-20,-2,depth))*29;
     a.post.settings.exposureBias=(1-deep)*(1-U.uDiveNight.value*.45)*(1-a.weather.state.storm*.26)+deep*.80;
-    a.post.settings.fixedExposure=2.6-deep*.9;a.post.settings.fixedExposureMix=Math.max(deep,U.uDiveNight.value*.98);
+    a.post.settings.fixedExposure=2.6-deep*1.1;a.post.settings.fixedExposureMix=Math.max(deep,U.uDiveNight.value*.98);
     a.post.settings.tonemap=1;
     a.post.settings.contrast=1.04-deep*.04;
-    a.post.settings.saturation=1.06+water*.16;
+    a.post.settings.saturation=1.03-water*.04;
     a.post.settings.exposureCompensation=(1-water)*(this.surfacePost.exposureCompensation??.4)-water*.55;
     a.post.settings.wetLens=(1-water)*Math.exp(-(a.time-(this.lastWetTime??-100))/5)*.6;
     a.post.settings.dof=false;a.post.settings.motionBlur=false;

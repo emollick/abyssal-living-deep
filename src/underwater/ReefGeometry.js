@@ -59,8 +59,9 @@ export function rockGeometry(seed = 1) {
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const f = 1 + Math.sin(x * 5.9 + seed) * Math.sin(y * 4.1 + 3.0) * Math.cos(z * 5.2) * 0.13
-      + Math.sin(x * 12.3 + z * 8.1 + seed) * Math.sin(y * 10.7) * 0.035;
+    const f = 1 + Math.sin(x * 3.9 + seed) * Math.sin(y * 3.1 + 3.0) * Math.cos(z * 4.2) * .18
+      + Math.sin(x * 12.3 + z * 8.1 + seed) * Math.sin(y * 10.7) * .075
+      + Math.sin(x * 27.1 + y * 18.4) * Math.cos(z * 23.7 + seed) * .022;
     p.setXYZ(i, x * f, y * f, z * f);
   }
   g.computeVertexNormals(); return g;
@@ -84,34 +85,45 @@ function addTerrain(group, habitat, rng) {
   const mesh = new THREE.Mesh(g, waterMaterial(0, { name: 'rippled-seabed' })); mesh.name = 'Rippled seabed'; group.add(mesh);
 }
 
-function addArch(batch, habitat, rng, cx = 5, cz = -20, radius = 14, height = 17, thickness = 2.3) {
-  const y = floorHeight(cx, cz, habitat) - 0.7;
-  const points = Array.from({ length: 21 }, (_, i) => {
-    const t = i / 20 * Math.PI;
-    return new THREE.Vector3(cx + Math.cos(t) * radius, y + Math.sin(t) * height, cz + Math.sin(t * 2.0) * 1.4);
-  });
-  const path = new THREE.CatmullRomCurve3(points);
-  const g = new THREE.TubeGeometry(path, 90, thickness, 16, false);
-  const p = g.attributes.position, n = g.attributes.normal;
-  for (let i = 0; i < p.count; i++) {
-    const noise = Math.sin(p.getX(i) * 0.59 + p.getY(i) * 0.81) * 0.48 + Math.sin(p.getY(i) * 2.1 + p.getZ(i) * 2.3) * 0.14;
-    p.setXYZ(i, p.getX(i) + n.getX(i) * noise, p.getY(i) + n.getY(i) * noise, p.getZ(i) + n.getZ(i) * noise);
+// Reuse a small set of procedurally grown skeletons. A recipe still chooses
+// every colony's form, proportions, orientation and color, without rebuilding
+// thousands of tiny tube paths whenever a population dial is released.
+const coralForms = new Map();
+function branchCoral(batch,x,y,z,size,color,rng,fan=false) {
+  const variant=Math.floor(rng()*12),key=(fan?'fan:':'bush:')+variant;
+  if(!coralForms.has(key)){
+    const draft=new Batch(null);
+    growBranchCoral(draft,0,0,0,1,'#ffffff',seeded(18031+variant*571+(fan?9311:0)),fan);
+    const form=mergeGeometries(draft.parts,false);draft.parts.forEach(g=>g.dispose());
+    coralForms.set(key,form);
   }
-  g.computeVertexNormals(); batch.add(g, '#819783', rng);
+  const form=coralForms.get(key),g=form.clone(),width=size*(.86+rng()*.28);
+  transform(g,[x,y,z],[width,size,width*(.87+rng()*.23)],[0,rng()*TAU,0]);
+  batch.add(g,color,rng);
+  const tint=g.attributes.color,detail=form.attributes.color;
+  for(let i=0;i<tint.count;i++)tint.setXYZ(i,tint.getX(i)*detail.getX(i),tint.getY(i)*detail.getY(i),tint.getZ(i)*detail.getZ(i));
 }
 
-function branchCoral(batch, x, y, z, size, color, rng, fan = false) {
+function growBranchCoral(batch, x, y, z, size, color, rng, fan = false) {
   const origin = new THREE.Vector3(x, y, z);
   const angle = rng() * TAU;
   const recurse = (start, dir, length, radius, level) => {
     const end = start.clone().addScaledVector(dir, length);
-    batch.add(segment(start, end, radius, radius * 0.54, 6), color, rng);
+    const mid=start.clone().lerp(end,.52).add(new THREE.Vector3((rng()-.5)*length*.10,0,(rng()-.5)*length*.10));
+    const curve=new THREE.CatmullRomCurve3([start,mid,end]);
+    const sides=radius>.013?7:5,steps=radius>.02?4:3;
+    const branch=new THREE.TubeGeometry(curve,steps,radius,sides,false),bp=branch.attributes.position;
+    for(let i=0;i<bp.count;i++){
+      const row=Math.floor(i/(sides+1)),t=row/steps,c=curve.getPointAt(t),taper=1-t*.48;
+      bp.setXYZ(i,c.x+(bp.getX(i)-c.x)*taper,c.y+(bp.getY(i)-c.y)*taper,c.z+(bp.getZ(i)-c.z)*taper);
+    }
+    branch.computeVertexNormals();batch.add(branch,color,rng);
     if (level <= 0) {
       const tip = end.clone().addScaledVector(dir, length * 0.12);
-      batch.add(segment(end, tip, radius * 0.58, radius * 0.24, 5), '#eee5c2', rng);
+      batch.add(segment(end, tip, radius * 0.54, radius * 0.18, 7), '#c2bba2', rng);
       return;
     }
-    const forks = level > 2 ? 3 : 2;
+    const forks = level > 1 ? 3 : 2;
     for (let j = 0; j < forks; j++) {
       let nd;
       if (fan) {
@@ -119,7 +131,7 @@ function branchCoral(batch, x, y, z, size, color, rng, fan = false) {
         nd = new THREE.Vector3(Math.sin(angle) * a, 0.5 + rng() * 0.6, Math.cos(angle) * a);
       } else nd = new THREE.Vector3((rng() - 0.5) * 1.5, 0.5 + rng() * 0.7, (rng() - 0.5) * 1.5);
       nd.addScaledVector(dir, 0.5).normalize();
-      recurse(end, nd, length * (0.63 + rng() * 0.1), radius * 0.58, level - 1);
+      recurse(end, nd, length * (0.63 + rng() * 0.1), radius * (fan?.60:.69), level - 1);
     }
   };
   const crown=origin.clone().add(new THREE.Vector3(0,size*0.12,0));
@@ -128,16 +140,16 @@ function branchCoral(batch, x, y, z, size, color, rng, fan = false) {
   for(let j=0;j<trunks;j++) {
     const a=angle+j/trunks*TAU;
     const dir=fan?new THREE.Vector3(Math.sin(angle)*(j-1)*0.8,1,Math.cos(angle)*(j-1)*0.8):new THREE.Vector3(Math.cos(a)*0.55,0.7+rng()*0.35,Math.sin(a)*0.55);
-    recurse(crown,dir.normalize(),size*(fan?0.32:0.33),size*0.027,fan?5:size>2.4?4:3);
+    recurse(crown,dir.normalize(),size*(fan?.28:.27),size*(fan?.025:.041),4);
   }
 }
 
 function plateGeometry(radius, wobble = 0) {
-  const p = [], uv = [], idx = []; const rings = 6, sides = 38;
+  const p = [], uv = [], idx = []; const rings = 12, sides = 72;
   for (let j = 0; j <= rings; j++) for (let i = 0; i <= sides; i++) {
     const a = i / sides * TAU, r = j / rings;
-    const rr = radius * r * (1.0 + Math.sin(a * 7 + wobble) * r * 0.09);
-    p.push(Math.cos(a) * rr, r * r * radius * 0.11 + Math.sin(a * 5 + wobble) * radius * r * 0.06, Math.sin(a) * rr);
+    const rr = radius * r * (1.0 + Math.sin(a * 5 + wobble) * r * .15 + Math.sin(a*11+wobble)*r*.045);
+    p.push(Math.cos(a) * rr, r*r*radius*.10+Math.sin(a*5+wobble)*radius*r*.05+Math.sin(r*14+a*3)*r*.014,Math.sin(a)*rr);
     uv.push(r, a / TAU);
     if (j < rings && i < sides) { const n = j * (sides + 1) + i; idx.push(n, n + sides + 1, n + 1, n + 1, n + sides + 1, n + sides + 2); }
   }
@@ -148,7 +160,7 @@ function plateGeometry(radius, wobble = 0) {
 function leafGeometry(start, end, width, twist, bend = 0.25) {
   const p = [], uv = [], idx = [], dir = new THREE.Vector3().subVectors(end, start);
   const side = new THREE.Vector3(Math.cos(twist), 0.1, Math.sin(twist));
-  const rows = 9, cols = 4;
+  const rows = 16, cols = 6;
   for (let j = 0; j <= rows; j++) for (let i = 0; i <= cols; i++) {
     const t = j / rows, s = i / cols * 2 - 1;
     const w = Math.pow(Math.sin(t * Math.PI), 0.65) * width;
@@ -163,17 +175,18 @@ function leafGeometry(start, end, width, twist, bend = 0.25) {
 
 function addKelp(batch, x, y, z, height, rng, small = false) {
   const phase = rng() * TAU;
-  const at = t => new THREE.Vector3(x + Math.sin(t * 5 + phase) * t * 1.2, y + t * height, z + Math.cos(t * 4 + phase) * t * 1.3);
+  const at=t=>new THREE.Vector3(x+Math.sin(t*4+phase)*t*.9+Math.sin(phase)*t*t*t*height*.24,y+t*height,z+Math.cos(t*3+phase)*t*.9+Math.cos(phase)*t*t*t*height*.19);
   const path = new THREE.CatmullRomCurve3(Array.from({ length: 20 }, (_, i) => at(i / 19)));
-  const flex = (px, py) => Math.pow(Math.max(0, py - y) / height, 1.4) * (small ? 0.6 : 2.3);
-  batch.add(new THREE.TubeGeometry(path, 28, small ? 0.025 : 0.075, 5, false), '#67672b', rng, flex);
-  const count = small ? 9 : Math.floor(height * 2.3);
+  const flex = (px, py) => Math.pow(Math.max(0, py - y) / height, 1.4) * (small ? .22 : 1.10);
+  batch.add(new THREE.TubeGeometry(path, 36, small ? .012 : .030, 7, false), '#53533a', rng, flex);
+  const count=small?9:Math.floor(height*1.9);
   for (let j = 1; j < count; j++) {
-    const t = j / count, a = j * 2.39996 + phase;
-    const start = at(t), length = (small ? 0.45 : 1.1) + rng() * (small ? 0.7 : 2.0);
+    const t=(j+Math.sin(j*2.3)*.22)/count,a=j*2.39996+phase+(rng()-.5)*.28;
+    const start = at(t), length = (small ? .25 : .65) + rng() * (small ? .50 : 1.05);
     const end = start.clone().add(new THREE.Vector3(Math.cos(a) * length, -length * 0.7 + rng() * 0.55, Math.sin(a) * length));
-    const color = new THREE.Color().setHSL(0.15 + rng() * 0.035, 0.5 + rng() * 0.22, 0.22 + rng() * 0.12);
+    const color = new THREE.Color().setHSL(.125+rng()*.03,.30+rng()*.19,.19+rng()*.095);
     batch.add(leafGeometry(start, end, length * 0.095, a + Math.PI / 2, length * 0.38), color, rng, flex);
+    if(!small){const bladder=new THREE.SphereGeometry(.050+rng()*.015,9,7);bladder.scale(1,1.4,1);bladder.translate(start.x,start.y,start.z);batch.add(bladder,'#71633d',rng,flex);}
   }
 }
 
@@ -181,13 +194,14 @@ export function createHabitatGeometry(habitat) {
   const rng = seeded(habitat.seed), group = new THREE.Group(); group.name = habitat.name;
   const density = habitat.life ?? 1, relief = habitat.relief ?? 1;
   const rocks = new Batch(waterMaterial(1, { name: 'reef-limestone' }));
-  const corals = new Batch(waterMaterial(2, { name: 'coral', glow: 0.022 }));
+  const corals = new Batch(waterMaterial(2, { name: 'coral' }));
   const plants = new Batch(waterMaterial(3, { name: 'kelp' }));
   const brains = new Batch(waterMaterial(2, { name: 'brain-coral', pattern: 1 }));
-  const luminous = new Batch(waterMaterial(2, { name: 'living-lights', glow: habitat.id === 'deep' ? 0.75 : 0.13 }));
+  const luminous = new Batch(waterMaterial(2, { name: 'benthic-invertebrates' }));
+  const chimneys = new Batch(waterMaterial(1, { name: 'mineral-chimneys', pattern: 2 }));
   if (!habitat.connected) addTerrain(group, habitat, rng);
   const isDeep = habitat.id === 'deep', isBlue = habitat.id === 'blue', isKelp = habitat.id === 'kelp';
-  const palette = isDeep ? ['#83cbb8', '#57d9d2', '#b49fe3', '#dbb994'] : ['#e4a382', '#d7859a', '#bd8ec1', '#d6c17b', '#d09b58', '#aeccba'];
+  const palette = ['#b7996b','#cab79b','#ba8f76','#97889e','#8b9571','#ac897e'];
   const rockCount = isBlue ? 95 : 200;
   const baseRock = rockGeometry(4);
   for (let i = 0; i < rockCount; i++) {
@@ -195,13 +209,23 @@ export function createHabitatGeometry(habitat) {
     if (Math.abs(x - Math.sin(z * 0.055) * 5) < 6 && z > -35 && z < 45) x += 13 * (x < 0 ? -1 : 1);
     let s = (0.6 + rng() ** 2 * 5.6) * (0.5 + relief * 0.5);
     if (i < 18) s *= 1.7;
+    if(isDeep)s*=.48;
     const y = floorHeight(x, z, habitat) - s * 0.4;
-    rocks.add(transform(baseRock.clone(), [x, y, z], [s * 1.4, s * (isDeep ? 1.0 : 0.8), s], [rng(), rng() * TAU, rng() * 0.4]), isDeep ? '#354650' : '#95a18a', rng);
+    rocks.add(transform(baseRock.clone(),[x,y,z],[s*1.4,s*(isDeep?.48:.65),s],[rng(),rng()*TAU,rng()*.4]),isDeep?'#6f7069':'#9e9b87',rng);
   }
   baseRock.dispose();
   if (habitat.id === 'reef') {
-    addArch(rocks, habitat, rng, 5, -20, 13 + rng() * 3, 15 + relief * 2, 1.8 + relief * 0.5);
-    addArch(rocks, habitat, rng, -32, -56, 10, 20, 3.6);
+    for(let i=0;i<12;i++){
+      const x=(i%2?1:-1)*(16+rng()*8),z=-9-Math.floor(i/2)*11,s=6+rng()*5,high=2.5+rng()*3.8;
+      rocks.add(transform(rockGeometry(habitat.seed+i*97),[x,floorHeight(x,z,habitat)-high*.30,z],[s,high,s*.7],[0,rng()*TAU,.1]),'#949580',rng);
+      for(let j=0;j<Math.round(9*density);j++){
+        const a=rng()*TAU,r=Math.sqrt(rng())*.70,px=x+Math.cos(a)*r*s,pz=z+Math.sin(a)*r*s*.7;
+        const py=floorHeight(x,z,habitat)-high*.30+high*Math.sqrt(1-r*r)-.35;
+        const size=.6+rng()*1.3;
+        if(j%5===0)brains.add(transform(rockGeometry(j+i),[px,py+size*.23,pz],[size,size*.5,size*.88]),'#b9b18a',rng);
+        else branchCoral(corals,px,py,pz,size,palette[j%palette.length],rng,j%4===0);
+      }
+    }
     // Large shelf forms make the small coral legible as an ecosystem on a reef.
     for (const [x, z, s] of [[-22, 3, 8], [20, 7, 7], [-17, -29, 7], [28, -29, 9]]) {
       const y = floorHeight(x, z, habitat);
@@ -214,22 +238,15 @@ export function createHabitatGeometry(habitat) {
         const a=rng()*TAU,r=Math.sqrt(rng())*0.88;
         const x=cx+Math.cos(a)*r*s,z=cz+Math.sin(a)*r*s*0.8;
         const base=y+s*0.44*Math.sqrt(1-r*r)-0.12;
-        const color=['#ee876f','#e4aacf','#e8c078','#c999dd','#e9b18e','#da7769'][j%6];
+        const color=palette[j%palette.length];
         if(j%4===0) {
-          const size=0.6+rng()*1.1;
-          brains.add(transform(rockGeometry(j),[x,base+size*0.4,z],[size,size*0.7,size]),'#c6c28c',rng);
+          const size=.35+rng()*.80;
+          brains.add(transform(rockGeometry(j),[x,base+size*.30,z],[size,size*.65,size*.88]),'#b9b18a',rng);
         }else if(j%4===1) {
-          const size=0.7+rng()*1.5;
-          for(let k=0;k<3;k++){const g=plateGeometry(size*(1-k*0.16),rng()*5);g.translate(x,base+0.2+k*0.45,z);corals.add(g,color,rng);}
-        }else branchCoral(corals,x,base,z,2.7+rng()*3.1,color,rng,j%7===0);
+          const size=.30+rng()*.85;
+          for(let k=0;k<2;k++){const g=plateGeometry(size*(1-k*.21),rng()*5);g.rotateZ((rng()-.5)*.25);g.translate(x,base+.08+k*.15,z);corals.add(g,color,rng);}
+        }else branchCoral(corals,x,base,z,1.1+rng()*1.8,color,rng,j%7===0);
       }
-    }
-    // Encrusting colonies soften the mathematical arch into a living formation.
-    for(let j=0;j<Math.round(30*density);j++) {
-      const a=0.15+rng()*(Math.PI-0.3),x=5+Math.cos(a)*15;
-      const y=floorHeight(5,-20,habitat)-0.7+Math.sin(a)*19.0;
-      const z=-20+Math.sin(a*2)*1.4+(rng()-0.5)*2;
-      branchCoral(corals,x,y,z,0.7+rng()*1.9,palette[j%palette.length],rng);
     }
   }
   if (isBlue) {
@@ -238,12 +255,12 @@ export function createHabitatGeometry(habitat) {
       rocks.add(transform(rockGeometry(h), [x, y + h * 0.25, z], [9, h * 0.65, 8]), '#5e797d', rng);
     }
   }
-  if (!isBlue && !isKelp) {
+  if (!isBlue && !isKelp && !isDeep) {
     const count = Math.floor((isDeep ? 88 : 200) * density);
     for (let i = 0; i < count; i++) {
       let x = (rng() - 0.5) * 112, z = (rng() - 0.5) * 114 - 5;
       if (Math.abs(x - Math.sin(z * 0.055) * 5) < 7 && z > -34) x += x < 0 ? -8 : 8;
-      const y = floorHeight(x, z, habitat), size = 0.9 + rng() ** 1.4 * 3.3;
+      const y = floorHeight(x, z, habitat), size = .45 + rng() ** 1.4 * 1.8;
       const color = palette[Math.floor(rng() * palette.length)], style = rng();
       const batch = isDeep ? luminous : corals;
       if (style < 0.46) branchCoral(batch, x, y, z, size, color, rng, style < 0.12);
@@ -256,21 +273,35 @@ export function createHabitatGeometry(habitat) {
         }
       } else {
         const profile = [new THREE.Vector2(0.3, 0), new THREE.Vector2(0.48, 0.3), new THREE.Vector2(0.64, 1.3), new THREE.Vector2(0.60, 1.65), new THREE.Vector2(0.44, 1.7), new THREE.Vector2(0.39, 1.36), new THREE.Vector2(0.27, 0.28)];
-        const g = new THREE.LatheGeometry(profile, 17);
-        batch.add(transform(g, [x, y, z], [size * 0.6, size, size * 0.6], [rng() * 0.18, rng(), rng() * 0.16]), color, rng);
+        const g = new THREE.LatheGeometry(profile, 38);
+        const gp=g.attributes.position;
+        for(let n=0;n<gp.count;n++){
+          const py=gp.getY(n),a=Math.atan2(gp.getZ(n),gp.getX(n));
+          const r=1+Math.sin(a*6+py*2)*.08+Math.cos(a*11-py*4)*.035+Math.sin(a*2-py)*.13;
+          gp.setX(n,gp.getX(n)*r+Math.sin(py*1.6)*py*.10);gp.setZ(n,gp.getZ(n)*r+Math.cos(py*1.2)*py*.06);
+          gp.setY(n,py+Math.max(0,(py-.9)/.8)*(Math.sin(a*3+py)*.10+Math.cos(a*7)*.035));
+        }
+        g.computeVertexNormals();
+        batch.add(transform(g,[x,y,z],[size*.8,size*.58,size*.8],[rng()*.14,rng(),rng()*.12]),color,rng);
       }
     }
   }
   if (isKelp) {
-    for (let i = 0; i < Math.floor(92 * density); i++) {
+    for (let i = 0; i < Math.floor(76 * density); i++) {
       let x = (rng() - 0.5) * 120, z = (rng() - 0.5) * 130 - 12;
       if (Math.abs(x) < 5 && z > -20) x += x < 0 ? -10 : 10;
       const y = floorHeight(x, z, habitat);
-      addKelp(plants, x, y, z, Math.min(-y - 2.5, (19 + rng() * 15) * (habitat.height ?? 1)), rng);
+      const fronds=2+Math.floor(rng()*3);
+      for(let j=0;j<fronds;j++)addKelp(plants,x+(rng()-.5)*.35,y,z+(rng()-.5)*.35,Math.min(-y-1.7,(18+rng()*15)*(habitat.height??1)),rng);
+      for(let j=0;j<8;j++){
+        const a=j/8*TAU,root=new THREE.Vector3(x+Math.cos(a)*(.35+rng()*.3),y+.04,z+Math.sin(a)*(.35+rng()*.3));
+        const curve=new THREE.CatmullRomCurve3([root,new THREE.Vector3(x+Math.cos(a)*.18,y+.24,z+Math.sin(a)*.18),new THREE.Vector3(x,y+.45,z)]);
+        plants.add(new THREE.TubeGeometry(curve,6,.027,5,false),'#5b5034',rng);
+      }
     }
   }
   if (!isDeep && !isBlue) {
-    for (let i = 0; i < Math.floor((isKelp ? 95 : 135) * density); i++) {
+    for (let i = 0; i < Math.floor((isKelp ? 240 : 160) * density); i++) {
       const x = (rng() - 0.5) * 110, z = (rng() - 0.5) * 115;
       if (Math.abs(x) < 5) continue;
       const y = floorHeight(x, z, habitat);
@@ -279,29 +310,49 @@ export function createHabitatGeometry(habitat) {
   }
   const ventPositions = [];
   if (isDeep) {
-    for (const [cx, cz, scale] of [[-11, -11, 1.1], [16, -30, 1.5], [-30, -47, 1.8], [29, 6, 0.7], [1, -60, 1.1]]) {
+    for (const [cx, cz, scale] of [[-8,14,.85],[11,-9,1.1],[-23,-38,.8],[19,21,.55],[1,-55,1.4]]) {
       const y = floorHeight(cx, cz, habitat);
-      for (let j = 0; j < 5; j++) {
+      for (let j = 0; j < 4; j++) {
         const a = rng() * TAU, r = rng() * 3.7 * scale;
-        const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, height = (5 + rng() * 8) * scale;
-        const profile = Array.from({ length: 16 }, (_, n) => {
-          const t = n / 15;
-          return new THREE.Vector2((1.6 - t * 1.0 + Math.sin(t * 18 + j) * 0.17) * scale, t * height);
+        const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, height = (2.5 + rng() * 5.0) * scale;
+        const bottom=floorHeight(x,z,habitat)-.1;
+        const profile = Array.from({ length: 32 }, (_, n) => {
+          const t=n/31;
+          return new THREE.Vector2((.85*Math.pow(1-t,.7)+.13+Math.sin(t*27+j)*.095+Math.sin(t*53+j)*.036)*scale,t*height);
         });
-        const g = new THREE.LatheGeometry(profile, 15); g.translate(x, y, z); rocks.add(g, '#394b54', rng);
-        ventPositions.push([x, y + height, z]);
-        for (let k = 0; k < Math.floor(11 * density); k++) {
+        const g=new THREE.LatheGeometry(profile,36),gp=g.attributes.position;
+        for(let k=0;k<gp.count;k++){const py=gp.getY(k),a=Math.atan2(gp.getZ(k),gp.getX(k)),f=1+Math.sin(a*7+py*3.2)*.12+Math.cos(a*13-py*7.2)*.07;gp.setX(k,gp.getX(k)*f+Math.sin(py*.8+j)*py*.025);gp.setZ(k,gp.getZ(k)*f);}
+        g.computeVertexNormals();g.translate(x,bottom,z);chimneys.add(g,'#777260',rng);
+        ventPositions.push([x,bottom+height,z]);
+        for (let k = 0; k < Math.floor(20 * density); k++) {
           const angle = rng() * TAU, rad = (2 + rng() * 3) * scale;
-          const b = new THREE.Vector3(x + Math.cos(angle) * rad, y, z + Math.sin(angle) * rad);
-          const top = b.clone().add(new THREE.Vector3(rng() * 0.25, 0.7 + rng() * 1.3, rng() * 0.25));
-          corals.add(segment(b, top, 0.085, 0.04, 5), '#a0ada1', rng);
-          luminous.add(transform(new THREE.SphereGeometry(0.16, 7, 5), top.toArray(), [0.8, 1.6, 0.8]), '#eabda1', rng);
+          const px=x+Math.cos(angle)*rad,pz=z+Math.sin(angle)*rad,b=new THREE.Vector3(px,floorHeight(px,pz,habitat),pz);
+          const top=b.clone().add(new THREE.Vector3((rng()-.5)*.18,.30+rng()*.80,(rng()-.5)*.18));
+          corals.add(segment(b,top,.021,.015,8),'#b4afa0',rng);
+          luminous.add(transform(new THREE.SphereGeometry(.041,12,9),top.toArray(),[1,1.9,1]),'#894a3b',rng);
         }
       }
+      for(let k=0;k<Math.round(11*density);k++){
+        const a=rng()*TAU,r=.8+rng()*4.4,px=cx+Math.cos(a)*r,pz=cz+Math.sin(a)*r,g=plateGeometry(.22+rng()*.75,rng()*9),p=g.attributes.position;
+        for(let i=0;i<p.count;i++){const x=p.getX(i)+px,z=p.getZ(i)+pz;p.setXYZ(i,x,floorHeight(x,z,habitat)+.012,z);}
+        g.computeVertexNormals();corals.add(g,'#b0b1a1',rng);
+      }
+    }
+    for(let i=0;i<Math.round(17*density);i++){
+      const x=(rng()-.5)*90,z=(rng()-.5)*92,y=floorHeight(x,z,habitat);
+      if(i%3===0)branchCoral(corals,x,y,z,.65+rng()*.7,'#c0b8a5',rng,true);
     }
   }
+  const rubbleCount=isBlue?240:isDeep?980:800;
+  const rubbleGeometry=paintGeometry(rockGeometry(habitat.seed+27),isDeep?'#939184':'#aba48e');
+  const rubble=new THREE.InstancedMesh(rubbleGeometry,rocks.material,rubbleCount);rubble.name='Shell grit and rock fragments';
+  for(let i=0;i<rubbleCount;i++){
+    const x=(rng()-.5)*125,z=(rng()-.5)*130,size=.025+Math.pow(rng(),2.8)*.29;
+    dummy.position.set(x,floorHeight(x,z,habitat)+size*.08,z);dummy.scale.set(size*(.7+rng()),size*.35,size*(.6+rng()));dummy.rotation.set(rng(),rng()*TAU,rng());dummy.updateMatrix();rubble.setMatrixAt(i,dummy.matrix);
+  }
+  rubble.computeBoundingSphere();group.add(rubble);
   rocks.finish(group, 'Eroded limestone'); corals.finish(group, 'Coral colonies');
   brains.finish(group, 'Brain coral gardens');
-  plants.finish(group, 'Swaying forest'); luminous.finish(group, 'Bioluminescent colonies');
+  plants.finish(group,'Swaying forest');luminous.finish(group,'Tube-worm crowns');chimneys.finish(group,'Sulfide chimneys');
   return { group, ventPositions };
 }

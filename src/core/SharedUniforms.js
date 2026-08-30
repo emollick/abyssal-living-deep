@@ -95,6 +95,7 @@ export const U = {
   uDiveForward: { value: new THREE.Vector3(0, 0, -1) },
   uReefShadow: { value: null },
   uReefShadowMatrix: { value: new THREE.Matrix4() },
+  uUnderwaterShadowMode: { value: 0 },
   uCascadeGain: { value: new THREE.Vector3(1, 1, 1) },
   uDeepOrigin: { value: new THREE.Vector2(0, -782) },
   uDeepPulse: { value: new THREE.Vector4(0, -782, 1000, 0) },

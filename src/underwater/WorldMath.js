@@ -35,7 +35,7 @@ export const HABITATS = [
   {
     id: 'reef', name: 'Coral cathedral', short: 'The reef', number: '01',
     subtitle: 'A world beneath the waves.',
-    description: 'Follow the sand through a limestone arch. Beyond it, shoals turn in the light and rays pass over a garden of coral.',
+    description: 'Follow a sandy channel between weathered limestone shelves. Shoals turn above branching coral, sponges and encrusted rock.',
     depth: 28, color: '#c9e4d7', tint: [0.006, 0.105, 0.145], extinction: [0.027, 0.016, 0.011],
     eye: [-1, -19, 28], look: [3, -20, -17], seed: 713,
     species: 'ANTHIAS · BUTTERFLYFISH · MANTA RAYS',

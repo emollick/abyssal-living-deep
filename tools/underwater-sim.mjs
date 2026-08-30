@@ -30,7 +30,11 @@ for(const habitat of HABITATS) {
   const world=createHabitatGeometry(habitat);
   if(habitat.id==='reef')check(world.group.getObjectByName('Coral colonies')?.geometry.attributes.position.count>10000,'The reef must grow actual coral geometry.');
   if(habitat.id==='kelp')check(world.group.getObjectByName('Swaying forest')?.geometry.attributes.position.count>10000,'The kelp forest must contain kelp, not just a seabed.');
-  if(habitat.id==='deep')check(world.group.getObjectByName('Bioluminescent colonies')?.geometry.attributes.position.count>10000,'The deep must contain a living garden.');
+  if(habitat.id==='deep'){
+    check(world.group.getObjectByName('Tube-worm crowns')?.geometry.attributes.position.count>10000&&world.ventPositions.length>10,'The vent field must contain substantial attached life and mineral chimneys.');
+    let emits=false;world.group.traverse(o=>{if(o.material?.uniforms?.uGlow?.value>0)emits=true;});
+    check(!emits,'The seabed, rocks, corals and tube worms must reflect light instead of emitting it.');
+  }
   let vertices=0;
   world.group.traverse(o=>{
     if(!o.geometry)return;
