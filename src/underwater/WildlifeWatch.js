@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { FIELD_NOTES, projectWildlife, sightlineClear, wildlifeState, readJournal, recordObservation } from './FieldNotes.js';
+import { FIELD_NOTES, projectWildlife, sightlineClear, wildlifeState, readJournal, recordObservation, followFraming } from './FieldNotes.js';
 import { U } from '../core/SharedUniforms.js';
 import { smooth } from './OceanDomain.js';
 
 const up=new THREE.Vector3(0,1,0);
+const across=new THREE.Vector3(1,0,0);
 function readPosition(s){
   if(s.mesh){const p=s.mesh.position;s.x=p.x+s.origin[0];s.y=p.y;s.z=p.z+s.origin[1];}
   else if(s.pose){s.x=s.pose.x;s.y=s.pose.y+(s.centerY||0);s.z=s.pose.z;}
@@ -36,7 +37,7 @@ export class WildlifeWatch {
     this.exp=expedition;this.app=expedition.app;this.world=expedition.world;
     this.open=false;this.following=false;this.selected=null;this.candidates=[];this.generation=this.world.generation;
     this.forward=new THREE.Vector3();this.right=new THREE.Vector3();this.cameraUp=new THREE.Vector3();
-    this.point=new THREE.Vector3();this.destination=new THREE.Vector3();this.matrix=new THREE.Matrix4();this.rotation=new THREE.Quaternion();
+    this.point=new THREE.Vector3();this.destination=new THREE.Vector3();this.matrix=new THREE.Matrix4();this.rotation=new THREE.Quaternion();this.framingRotation=new THREE.Quaternion();
     try{this.storage=window.localStorage;}catch{this.storage=null;}
     this.entries=readJournal(this.storage);
     const panel=document.createElement('aside');panel.id='wildlife-watch';panel.className='wildlife-watch';panel.hidden=true;
@@ -109,7 +110,7 @@ export class WildlifeWatch {
     const s=readPosition(this.selected),cam=this.app.camera;
     this.exp.setSwim(false);this.exp.floatAtSurface=false;
     this.point.set(s.x,s.y,s.z);this.offset=cam.position.clone().sub(this.point);
-    const desired=THREE.MathUtils.clamp((s.span||1)*3.0,3.8,44);
+    const desired=followFraming(cam.aspect,s.span).distance;
     this.offset.normalize().multiplyScalar(desired);
     this.offset.y=Math.max(this.offset.y,Math.min(4,desired*.18));
     this.following=true;this.world.shadowDirty=true;this.followButton.textContent='Stop following';this.followButton.setAttribute('aria-pressed','true');
@@ -128,12 +129,15 @@ export class WildlifeWatch {
     const s=readPosition(this.selected),cam=this.app.camera;
     this.point.set(s.x,s.y,s.z);
     if(cam.position.distanceTo(this.point)>120){this.stopFollowing();return false;}
+    const framing=followFraming(cam.aspect,s.span),length=this.offset.length();
+    if(length>.01)this.offset.multiplyScalar(1+(framing.distance/length-1)*(1-Math.exp(-dt*.8)));
     this.destination.copy(this.point).add(this.offset);
     const step=this.destination.clone().sub(cam.position).multiplyScalar(1-Math.exp(-dt*.85));
     step.clampLength(0,dt*7);cam.position.add(step);
     this.exp.constrain(cam.position);this.world.fauna.motion.rocks.project(cam.position,1.05);
     this.exp.constrain(cam.position);
     this.matrix.lookAt(cam.position,this.point,up);this.rotation.setFromRotationMatrix(this.matrix);
+    this.rotation.multiply(this.framingRotation.setFromAxisAngle(across,framing.pitch));
     cam.quaternion.slerp(this.rotation,1-Math.exp(-dt*2.3));
     cam.fov+=(45-cam.fov)*(1-Math.exp(-dt*1.5));cam.updateProjectionMatrix();
     this.app.cine._smoothPos.copy(cam.position);this.app.cine._smoothLook.copy(this.point);

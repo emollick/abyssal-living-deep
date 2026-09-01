@@ -37,6 +37,9 @@ export const FIELD_NOTES = {
 };
 
 const JOURNAL_KEY='abyssal-field-journal-v1';
+export function followFraming(aspect,span){
+  return {distance:clamp((span||1)*3/Math.min(1,Math.max(.25,aspect)),3.8,44),pitch:aspect<.9?-Math.atan(Math.tan(Math.PI/8)*.48):0};
+}
 export function readJournal(storage) {
   try {
     const data=JSON.parse(storage?.getItem(JOURNAL_KEY)||'[]');

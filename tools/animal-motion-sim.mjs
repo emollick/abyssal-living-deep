@@ -6,7 +6,7 @@ import { oceanFloor } from '../src/underwater/OceanDomain.js';
 import { GENERATOR_DEFAULTS, HABITATS } from '../src/underwater/WorldMath.js';
 import { MarineLife } from '../src/underwater/MarineLife.js';
 import { excursionDepth, surfaceExcursion, soundscapeMix } from '../src/underwater/OceanEcology.js';
-import { projectWildlife, sightlineClear, readJournal, recordObservation, wildlifeState } from '../src/underwater/FieldNotes.js';
+import { projectWildlife, sightlineClear, readJournal, recordObservation, wildlifeState, followFraming } from '../src/underwater/FieldNotes.js';
 
 let checks=0;
 const check=(ok,message)=>{assert.ok(ok,message);checks++;};
@@ -202,6 +202,11 @@ check(readJournal(store).length===1&&readJournal(store)[0].depth===0,'Stored dat
 check(recordObservation(entries,{type:'crab'},713,32,{setItem(){throw new Error('disabled');}}),'Storage disabled must still allow observations during the visit.');
 check(wildlifeState({type:'parrotfish',pose:{feeding:.8}})==='Grazing','Observation should describe actual feeding state.');
 check(wildlifeState({type:'crab',benthic:true,pose:{speed:0}})==='Resting on the bottom','Still bottom dwellers must not be described as swimming.');
+const desktopFrame=followFraming(16/9,1.4),phoneFrame=followFraming(320/740,1.4);
+check(phoneFrame.distance>desktopFrame.distance,'A narrow screen needs more distance to fit a broad animal.');
+const framedCamera=new THREE.PerspectiveCamera(45,320/740,.1,100);framedCamera.position.set(0,0,phoneFrame.distance);framedCamera.lookAt(0,0,0);framedCamera.rotateX(phoneFrame.pitch);framedCamera.updateMatrixWorld();
+const framedPoint=new THREE.Vector3().project(framedCamera);
+check(framedPoint.y>.4&&framedPoint.y<.6,'Following on a phone must put the animal above the lower observation card.');
 
 const surfaceMix=soundscapeMix({depth:-2,wind:20}),deepMix=soundscapeMix({depth:1400,reef:1});
 check(surfaceMix.surf>deepMix.surf*10&&surfaceMix.cutoff>deepMix.cutoff,'Surface surf must become quieter and muffled with depth.');
