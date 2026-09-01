@@ -68,6 +68,7 @@ export function createOceanTerrain(recipe) {
 
 export function createPelagicLife(recipe) {
   const group=new THREE.Group();group.name='Life between the surface and the abyss';
+  const observables=[];
   const rng=seeded(recipe.seed+611),gel=(recipe.shoal??1)*(recipe.jellies??.65),canyonCount=Math.round(14*gel),columnCount=Math.round(18*gel),count=canyonCount+columnCount;
   const g=jellyGeometry(rng,.65),m=waterMaterial(5,{name:'twilight-jellies',motion:3,glow:.85,opacity:.8,transparent:true});
   const jellies=new THREE.InstancedMesh(g,m,Math.max(1,count));jellies.count=count;
@@ -79,6 +80,7 @@ export function createPelagicLife(recipe) {
     const a=rng()*TAU,r=8+rng()*22;
     const x=column?(rng()-.5)*24:pose.eye[0]+Math.cos(a)*r+8,z=column?-749+(rng()-.5)*15:pose.eye[2]+Math.sin(a)*r-12;
     data.push({x,y:Math.max(-depth,oceanFloor(x,z,recipe)+5),z,phase:rng()*TAU,size:.14+rng()*.24});
+    observables.push({id:`pelagic-jelly-${i}`,type:'jelly',x,y:data[i].y,z,span:data[i].size*3.5,visible:false});
   }
   group.add(jellies);jellies.frustumCulled=false;
   const chain=new Batch(waterMaterial(5,{name:'siphonophores',glow:.9,opacity:.7,transparent:true}));
@@ -95,14 +97,17 @@ export function createPelagicLife(recipe) {
       if(i%2===0){const b=new THREE.SphereGeometry(.18+Math.sin(t*Math.PI)*.16,9,7);b.scale(1,1.7,1);b.translate(p.x,p.y,p.z);bells.add(b,i%4?'#9edbd7':'#ebc3a5',rng);}
     }
     const tube=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),96,.055,5,false);chain.add(tube,'#90cfd4',rng);
+    observables.push({id:`siphonophore-${c}`,type:'siphonophore',x:points[32].x,y:points[32].y,z:points[32].z,span:17,visible:true});
   }
   chain.finish(group,'Drifting siphonophore ribbons');bells.finish(group,'Living lantern chains');
-  return {group,count:count+chainCount,jellyCount:count,chainCount,update(time,cameraPosition){
+  return {group,count:count+chainCount,jellyCount:count,chainCount,observables,update(time,cameraPosition){
     let visible=0;
     for(let i=0;i<count;i++){
       const d=data[i];
+      observables[i].visible=false;
       if(cameraPosition&&(Math.abs(d.y-cameraPosition.y)>150||Math.hypot(d.x-cameraPosition.x,d.z-cameraPosition.z)>145))continue;
       dummy.position.set(d.x+Math.sin(time*.08+d.phase)*1.6,d.y+Math.sin(time*.21+d.phase)*1.2,d.z);
+      Object.assign(observables[i],{x:dummy.position.x,y:dummy.position.y,z:dummy.position.z,visible:true});
       dummy.rotation.set(.05*Math.sin(time*.2+d.phase),d.phase+time*.01,0);dummy.scale.setScalar(d.size);dummy.updateMatrix();jellies.setMatrixAt(visible++,dummy.matrix);
     }
     jellies.count=visible;

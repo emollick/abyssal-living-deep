@@ -251,6 +251,41 @@ function addKelp(batch, x, y, z, height, rng, small = false) {
   }
 }
 
+// Short rooted blades grow in irregular sandy patches, with the channel left
+// open. Their flex is zero at the rhizome; current only moves the upper blade.
+export function seagrassGeometry(height, width, lean, angle) {
+  const p=[],uv=[],indices=[],rows=8;
+  for(let j=0;j<=rows;j++){
+    const t=j/rows,bend=lean*t*t,side=width*(1-.85*t*t),y=height*(t-.19*t*t*t);
+    for(const s of [-1,1]){
+      p.push(Math.cos(angle)*bend-Math.sin(angle)*side*s,y,Math.sin(angle)*bend+Math.cos(angle)*side*s);
+      uv.push((s+1)/2,t);
+    }
+    if(j<rows){const n=j*2;indices.push(n,n+1,n+2,n+1,n+3,n+2);}
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));
+  g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeVertexNormals();return g;
+}
+
+function growSeagrass(group,habitat,rocks){
+  const rng=seeded(habitat.seed+16381),density=habitat.life??1;
+  const meadow=new Batch(waterMaterial(3,{name:'seagrass'}));
+  const patches=[[-4,27,3.5],[6,27,4],[-5,13,3],[6,1,4],[-11,-9,4],[15,32,5],[-19,37,6],[24,-18,6]];
+  for(const [cx,cz,spread] of patches)for(let i=0;i<Math.round(65*density);i++){
+    const angle=rng()*TAU,r=Math.sqrt(rng())*spread,x=cx+Math.cos(angle)*r,z=cz+Math.sin(angle)*r;
+    if(Math.abs(x-Math.sin(z*.055)*5)<2.5)continue;
+    const y=floorHeight(x,z,habitat);
+    if(rocks.some(rock=>((x-rock.x)/(rock.rx+.2))**2+((y+.25-rock.y)/(rock.ry+.2))**2+((z-rock.z)/(rock.rz+.2))**2<1.12))continue;
+    const shoot=.26+rng()*.45,leanAngle=rng()*TAU;
+    for(let blade=0;blade<5+Math.floor(rng()*4);blade++){
+      const h=shoot*(.60+rng()*.65),g=seagrassGeometry(h,.013+rng()*.018,h*(.20+rng()*.60),leanAngle+(rng()-.5)*1.6);
+      g.translate(x+(rng()-.5)*.035,y-.014,z+(rng()-.5)*.035);
+      meadow.add(g,new THREE.Color().setHSL(.19+rng()*.035,.25+rng()*.13,.20+rng()*.12),rng,(_x,py)=>Math.max(0,(py-y)/h)**2*.10);
+    }
+  }
+  meadow.finish(group,'Seagrass meadows');
+}
+
 export function createHabitatGeometry(habitat) {
   const rng = seeded(habitat.seed), group = new THREE.Group(); group.name = habitat.name;
   const density = habitat.life ?? 1, relief = habitat.relief ?? 1;
@@ -415,6 +450,7 @@ export function createHabitatGeometry(habitat) {
     dummy.position.set(x,floorHeight(x,z,habitat)+size*.08,z);dummy.scale.set(size*(.7+rng()),size*.35,size*(.6+rng()));dummy.rotation.set(rng(),rng()*TAU,rng());dummy.updateMatrix();rubble.setMatrixAt(i,dummy.matrix);
   }
   rubble.computeBoundingSphere();group.add(rubble);
+  if(!isDeep&&!isBlue)growSeagrass(group,habitat,rockColliders);
   rocks.finish(group, 'Eroded limestone'); corals.finish(group, 'Coral colonies');
   brains.finish(group, 'Brain coral gardens');
   plants.finish(group,'Swaying forest');luminous.finish(group,'Tube-worm crowns');chimneys.finish(group,'Sulfide chimneys');

@@ -133,10 +133,10 @@ export class AnimalMotion {
         if(!a.hunter&&b.hunter&&!a.benthic)flee(p,b.pursuer?7:3.5,6.5);
         if(a.pursuer&&!b.hunter&&!b.benthic&&b.scale<a.scale*.8&&d2<preyD){preyD=d2;prey=p;}
         if(!!a.benthic!==!!b.benthic)return;
-        const separation=radius+(b.radius??b.scale*.5)+.10;
+        const separation=(a.personalSpace??radius)+(b.personalSpace??b.radius??b.scale*.5)+.10;
         if(d2<separation*separation*2.25){
           if(d2<1e-10){const side=i<j?1:-1;x=side*.08;z=side*.025;}
-          const d=Math.sqrt(d2),k=(1-d/(separation*1.5))*baseSpeed*2.4/Math.max(.08,d);
+          const d=Math.sqrt(d2),k=(1-d/(separation*1.5))*baseSpeed*(a.behavior==='hover'?5:2.4)/Math.max(.08,d);
           dx+=x*k;dy+=y*k*.7;dz+=z*k;
         }
         if(a.behavior==='school'&&b.school===a.school&&d2<36){

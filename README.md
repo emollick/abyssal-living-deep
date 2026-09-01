@@ -37,7 +37,15 @@ The 25 creature types have generated anatomy, seeded proportions and markings, a
 
 Schools keep space between neighbors, turn around large rocks, and scatter around nearby hunters or a swimming diver before regrouping. Reef fish approach feeding patches on the generated rock surfaces and pause with their heads lowered. Bottom dwellers move in short bouts, with crabs walking sideways and legs settling during pauses. The steering runs at a fixed time step, with smooth rendering between updates; pausing holds both animal positions and appendages. The camera does not disturb animals in Drift mode.
 
-The interface keeps the dive title, nearby animals and depth in view. Routine actions no longer produce pop-up messages. The seed and population count are in the lab, with performance details under **View & controls**.
+Choose **Observe** to study wildlife in the actual camera view. The marker follows the selected animal; **Next in view** cycles between visible animal groups, and tapping an animal selects it. **Follow animal** eases the camera toward a comfortable viewing distance and tracks its movement. Swimming, changing habitats, or closing observation releases the camera. The observation camera does not frighten animals.
+
+After a moment in view, the animal is recorded in the **Field journal**, which keeps the first sighting's depth and seed in this browser. Identification respects distance, the camera frame, rock and terrain occlusion, and available light; unlit animals in the dark do not count. The journal describes the generated animal groups, with natural-history links for selected entries. It does not identify exact biological species.
+
+The shallow sandy margins grow irregular patches of **seagrass**, with rooted blades that bend in the current. Living cover controls their density. Dolphins, seals, sea turtles and the humpback make gradual **surface excursions** on staggered cycles, returning to their cruising depths. These animation cycles use compressed time, not measured breathing intervals.
+
+**Ocean sound**, in World lab → Water, is optional and off at the start of each visit. Synthesized surf and water change with weather and depth; sparse reef crackle fades away from the reef, and distant whale-like calls occur near the whale. The volume dial and **M** shortcut control sound. Pausing or hiding the tab silences it. No sound recordings or microphone access are used.
+
+The interface keeps the dive title, nearby animals and depth in view. Routine actions stay quiet. Observation replaces the title only when requested; the journal is opened separately. The seed and population count are in the lab, with performance details under **View & controls**.
 
 ## Procedural dials
 
@@ -73,6 +81,8 @@ Geometry dials rebuild on release. Population dials replace the animal communiti
 | **Mouse wheel** | Zoom in Swim mode |
 | **1–4** | Travel to a habitat in the same ocean |
 | **G / R** | Open world lab / generate a new seed |
+| **O / J** | Observe wildlife / open the field journal |
+| **M** | Enable or mute ocean sound |
 | **F / P / H** | Toggle swimming / pause simulation / hide controls |
 | **L** | Override the automatic deep-water light |
 | **Camera button** | Save a PNG without the interface |
@@ -145,6 +155,10 @@ The existing rendering pipeline remains in `src/core`, `src/ocean`, `src/sky`, `
 | `FaunaGeometry.js` | Generated anatomy, markings and light organs for 25 added creature types |
 | `OceanFauna.js` | Seeded animal communities, population dials, schooling, avoidance and terrain-following movement |
 | `AnimalMotion.js` | Fixed-step steering, neighborhood spacing, rock avoidance, encounters and movement-driven animation phases |
+| `OceanEcology.js` | Staggered surface excursions and depth-dependent sound mixing |
+| `WildlifeWatch.js` | Visible-animal selection, follow camera, and field journal interface |
+| `FieldNotes.js` | Animal descriptions, sightline checks, and local journal persistence |
+| `OceanSound.js` | Optional procedural surf, water, reef transients and distant calls |
 | `UnderwaterMaterial.js` | Surface shading, caustics, absorption, fog and water ceiling |
 | `UnderwaterWorld.js` | World generation, light shafts, shadows, particles and render integration |
 | `Expedition.js` | World lab, sharing, exploration controls and habitat selection |

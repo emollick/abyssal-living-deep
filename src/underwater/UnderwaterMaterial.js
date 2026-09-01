@@ -313,10 +313,11 @@ void main() {
   if (uKind < 0.5) {
     float resolved=1.0-smoothstep(.6,3.0,length(fwidth(vWorld))*130.0);
     float mineral=noise3(vWorld*130.0),shallow=1.0-smoothstep(80.0,250.0,-vWorld.y);
-    float ripplePhase=vWorld.x*26.0+sin(vWorld.z*.65)*3.0+sin(vWorld.z*3.2)*.45;
+    float ripplePhase=vWorld.x*24.0+sin(vWorld.z*.32)*4.8+sin(vWorld.z*1.5+vWorld.x*.13)*.9+noise3(vWorld*.38)*3.0;
     float ripple=sin(ripplePhase)*(1.0-smoothstep(.75,3.0,fwidth(ripplePhase)));
-    base*=.68+grain*.38+mineral*resolved*.12+ripple*shallow*.045;
-    relief=ripple*shallow*.007+grain*.032+mineral*resolved*.001;
+    float ripplePatch=smoothstep(.24,.68,noise3(vWorld*.19));
+    base*=.68+grain*.38+mineral*resolved*.12+ripple*shallow*ripplePatch*.034;
+    relief=ripple*shallow*ripplePatch*.007+grain*.032+mineral*resolved*.001;
     float cliff=smoothstep(.30,.75,1.0-abs(n.y));
     float layers=sin(vWorld.y*1.65+fbm3(vWorld*.12)*5.4);
     float seams=pow(abs(sin(vWorld.y*.51+noise3(vWorld*.22)*2.2)),28.0);

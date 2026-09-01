@@ -3,6 +3,8 @@ import { U } from '../core/SharedUniforms.js';
 import { CONDITIONS } from '../ui/Sandbox.js';
 import { HABITATS, GENERATOR_DEFAULTS, parseSeed } from './WorldMath.js';
 import { constrainToOcean, transectPose, routeBetween, travelSpeed, depthZone, smooth, initialView, floatEyeHeight, SURFACE_EYE_HEIGHT } from './OceanDomain.js';
+import { WildlifeWatch } from './WildlifeWatch.js';
+import { OceanSound } from './OceanSound.js';
 import './expedition.css';
 
 const icons = {
@@ -42,6 +44,13 @@ export class Expedition {
     if(this.reducedMotion&&!this.floatAtSurface)this.setSwim(true);
     this.syncDials();
     this.writeURL();
+    this.watch=new WildlifeWatch(this);this.sound=new OceanSound(app);
+    $('dive-observe').onclick=()=>this.watch.toggle();
+    $('lab-observe').onclick=()=>this.watch.toggle(true);
+    $('journal-count').onclick=()=>this.watch.showJournal();
+    $('journal-count').textContent=this.watch.entries.length?`Field journal · ${this.watch.entries.length} observed`:'Open field journal';
+    $('sound-toggle').onclick=()=>this.toggleSound();
+    this.bindRange($('sound-volume'),0,100,5,()=>{this.sound.volume=+$('sound-volume').value/100;$('sound-volume-value').textContent=`${$('sound-volume').value}%`;});
   }
 
   buildUI() {
@@ -65,6 +74,7 @@ export class Expedition {
         <div class="dive-transport"><div class="dive-transport-buttons">
           <button class="dive-action" id="dive-drift" aria-pressed="true">Drift</button>
           <button class="dive-action" id="dive-swim" aria-pressed="false">Swim</button>
+          <button class="dive-action" id="dive-observe" aria-label="Observe wildlife" aria-expanded="false" aria-controls="wildlife-watch" title="Observe wildlife (O)">Observe</button>
           <button class="dive-action" id="dive-pause" aria-label="Pause simulation" title="Pause simulation (P)">${icon('pause')}</button>
           <button class="dive-action" id="dive-lamp" aria-label="Dive light" aria-pressed="false" title="Dive light (L)">${icon('lamp')}</button>
           <button class="dive-action" id="dive-photo" aria-label="Save a photograph" title="Save a photograph">${icon('camera')}</button>
@@ -79,10 +89,15 @@ export class Expedition {
         <h3>Terrain & cover</h3><div id="generator-dials"></div>
         <p class="lab-note">The same seed and dials grow the same reef, forest and trench. Geometry changes apply when you release a dial.</p></section>
         <section class="lab-panel" id="lab-panel-life" data-lab-panel="life" role="tabpanel" aria-labelledby="lab-tab-life" hidden>
+        <div class="lab-button-row"><button id="lab-observe" class="lab-button">Observe wildlife</button><button id="journal-count" class="lab-quiet">Open field journal</button></div>
+        <p class="lab-note">Observe an animal in view, follow its movement, or tap another animal to study it. Your sightings stay in the field journal.</p>
         <div id="fauna-dials"></div><p class="lab-note">Animal abundance scales the whole population. Hunters, bottom dwellers and jellies shape its balance. Nearby animals are named beside the dive title.</p>
         <details class="lab-more"><summary>Life by depth</summary><p class="lab-note"><strong>Reef & forest</strong><br>Butterflyfish, parrotfish, sharks and seals; octopuses, crabs, sea stars and urchins on the bottom.</p><p class="lab-note"><strong>Open water</strong><br>Whales, dolphins, tuna, sunfish, rays and squid.</p><p class="lab-note"><strong>Twilight</strong><br>Lanternfish and hatchetfish give way to vampire squid, dragonfish and midwater shrimp.</p><p class="lab-note"><strong>Midnight & seafloor</strong><br>Anglerfish, gulper eels and flapjack octopuses above isopods, brittle stars, sea cucumbers, sea pens and vent shrimp.</p><p class="lab-note">Animal sizes are approximate. These habitats combine species from different oceans for exploration.</p></details>
         </section><section class="lab-panel" id="lab-panel-water" data-lab-panel="water" role="tabpanel" aria-labelledby="lab-tab-water" hidden>
         <div id="water-dials"></div><div class="lab-control-label" id="light-mode-label">Dive light</div><div class="lab-choices" role="group" aria-labelledby="light-mode-label">${[['auto','Automatic'],['on','On'],['off','Off']].map(([id,label])=>`<button data-lamp="${id}" aria-label="${label} dive light" aria-pressed="${id==='auto'}">${label}</button>`).join('')}</div><p class="lab-note">Automatic light comes on as sunlight fades with depth.</p>
+        <h3>Soundscape</h3><button id="sound-toggle" class="lab-quiet lab-wide" aria-pressed="false">Enable ocean sound</button>
+        <div class="dial"><div class="dial-heading"><label for="sound-volume">Ocean volume</label><output id="sound-volume-value" for="sound-volume">35%</output></div><input id="sound-volume" type="range" min="0" max="100" value="35" step="5"></div>
+        <p class="lab-note" id="sound-status" role="status">Optional synthesized surf, water, reef crackle, and distant whale-like calls. No recordings. M toggles sound.</p>
         <h3>Upwelling & tremors</h3><div id="deep-dials"></div><button id="seafloor-tremor" class="lab-button lab-wide">Trigger a seafloor tremor</button><p class="lab-note">Deep upwelling feeds a green surface bloom, luminous at night. A tremor stirs the bottom and sends a wave out across the sea.</p><p class="lab-stat" id="coupling-status"></p>
         </section><section class="lab-panel" id="lab-panel-weather" data-lab-panel="weather" role="tabpanel" aria-labelledby="lab-tab-weather" hidden>
         <div class="lab-weather">${[['day','Day'],['dusk','Dusk'],['storm','Storm'],['night','Night']].map(([id,label])=>`<button data-weather="${id}" aria-pressed="${id==='day'}">${label}</button>`).join('')}</div><div id="weather-dials"></div>
@@ -99,6 +114,8 @@ export class Expedition {
     const guide=document.createElement('dialog');guide.className='dive-help';guide.id='dive-guide';
     guide.innerHTML=`<h2>Sky to abyss.</h2><p>This is one continuous ocean. Ascend vertically into the air, descend along the continental slope, or choose a depth stop. The four habitats are places in the same world. Stop a journey anywhere and take control.</p><dl><dt>Ascend / Descend</dt><dd>Travel to the surface or the 1,400-metre trench</dd><dt>W A S D</dt><dd>Swim in the direction you look</dd><dt>Drag</dt><dd>Look around; wheel to zoom</dd><dt>Q / E</dt><dd>Swim down / up, through the waterline</dd><dt>Shift</dt><dd>Move faster</dd><dt>1 – 4</dt><dd>Travel to a habitat</dd><dt>G / R</dt><dd>World lab / new seed</dd><dt>F / P / H</dt><dd>Swim or drift / pause / hide controls</dd><dt>L</dt><dd>Override the automatic deep-water light</dd></dl><p>Weather remains active at every depth. Waves, rain and storms stir the upper ocean; their motion fades as you descend. Deep upwelling carries nutrients into a surface bloom. Trigger a seafloor tremor and watch its expanding wave from above or below.</p><p>On touchscreens, drag to look and use the swimming buttons. Desktop graphics are recommended; lower the quality if your device struggles.</p><p>Everything is generated here. Travel speeds and transport times are compressed for exploration. This is an artistic simulation, not a predictive oceanographic model.</p><p>Built on <a href="https://github.com/Token-Gremlin/natural-disasters" target="_blank" rel="noopener">ABYSSAL by Token-Gremlin</a>, preserving its FFT ocean, atmosphere and extreme weather. MIT licensed.</p><button id="close-dive-guide">Back to the water</button>`;
     document.body.appendChild(guide);this.guide=guide;
+    guide.querySelector('dl').insertAdjacentHTML('beforeend','<dt>O / J</dt><dd>Observe wildlife / open the field journal</dd><dt>M</dt><dd>Enable or mute ocean sound</dd>');
+    const observationHelp=document.createElement('p');observationHelp.textContent='Choose Observe to identify an animal in view. Follow animal brings you closer without disturbing it; Swim takes control again. Tap another visible animal or choose Next in view. After a moment of observation, its entry is saved to your field journal in this browser.';guide.querySelector('dl').after(observationHelp);
     guide.setAttribute('aria-labelledby','dive-guide-title');guide.querySelector('h2').id='dive-guide-title';
     const guideClose=document.createElement('button');guideClose.className='guide-close';guideClose.textContent='×';guideClose.setAttribute('aria-label','Close help');guideClose.autofocus=true;guideClose.onclick=()=>guide.close();guide.prepend(guideClose);
     $('dive-surface').onclick=()=>this.surface();$('dive-descend').onclick=()=>this.visit('deep');$('dive-lab-toggle').onclick=()=>this.toggleLab();
@@ -155,8 +172,13 @@ export class Expedition {
       else this.world.settings[key]=value;
       if(live)this.writeURL();
     };
-    input.addEventListener('input',apply);
     const commit=()=>{apply();if(!live)this.regenerate(this.world.seed,false);};
+    this.bindRange(input,min,max,step,apply,commit);
+    this.dials[key]={input,out,fmt,weather,angle};
+  }
+
+  bindRange(input,min,max,step,apply,commit=apply) {
+    input.addEventListener('input',apply);
     input.addEventListener('change',commit);
     // Explicit pointer/keyboard handling keeps the dials consistent in embedded
     // browsers, where native range dragging can otherwise lose its capture.
@@ -175,18 +197,17 @@ export class Expedition {
       if(!(e.key in delta)&&e.key!=='Home'&&e.key!=='End')return;
       e.preventDefault();input.value=e.key==='Home'?min:e.key==='End'?max:Math.max(min,Math.min(max,+input.value+delta[e.key]));commit();
     });
-    this.dials[key]={input,out,fmt,weather,angle};
   }
 
   bindKeys() {
     window.addEventListener('keydown',e=>{
       if(!this.active)return;
-      if(this.guide.open)return;
+      if(document.querySelector('dialog[open]'))return;
       if(e.code==='Escape'&&!$('dive-lab').hidden){e.preventDefault();e.stopImmediatePropagation();this.toggleLab(false);$('dive-lab-toggle').focus();return;}
       if(e.target.matches?.('input,textarea,select')||e.code==='Tab')return;
       if(e.target.matches?.('button')&&['Space','Enter'].includes(e.code))return;
-      if(e.repeat&&['KeyG','KeyR','KeyH','KeyP','KeyL','KeyF'].includes(e.code))return;
-      const actions={KeyG:()=>this.toggleLab(),KeyR:()=>this.newSeed(),KeyH:()=>this.setControlsHidden(!document.body.classList.contains('dive-clean')),KeyP:()=>this.pause(),KeyF:()=>this.setSwim(!this.app.cine.free),KeyL:()=>this.lamp(),Slash:()=>this.guide.showModal(),Digit1:()=>this.visit('reef'),Digit2:()=>this.visit('kelp'),Digit3:()=>this.visit('blue'),Digit4:()=>this.visit('deep'),Escape:()=>this.toggleLab(false)};
+      if(e.repeat&&['KeyG','KeyR','KeyH','KeyP','KeyL','KeyF','KeyO','KeyJ','KeyM'].includes(e.code))return;
+      const actions={KeyG:()=>this.toggleLab(),KeyR:()=>this.newSeed(),KeyH:()=>this.setControlsHidden(!document.body.classList.contains('dive-clean')),KeyP:()=>this.pause(),KeyF:()=>this.setSwim(!this.app.cine.free),KeyL:()=>this.lamp(),KeyO:()=>this.watch?.toggle(),KeyJ:()=>this.watch?.showJournal(),KeyM:()=>this.toggleSound(),Slash:()=>this.guide.showModal(),Digit1:()=>this.visit('reef'),Digit2:()=>this.visit('kelp'),Digit3:()=>this.visit('blue'),Digit4:()=>this.visit('deep'),Escape:()=>this.watch?.open?this.watch.toggle(false):this.toggleLab(false)};
       if(actions[e.code]){e.preventDefault();e.stopImmediatePropagation();actions[e.code]();}
       // Surface-only cinematic shortcuts must not change the submerged director.
       if(['KeyN','KeyB','KeyC'].includes(e.code))e.stopImmediatePropagation();
@@ -230,6 +251,7 @@ export class Expedition {
   }
 
   travelTo(destination,title,id=null,vertical=false) {
+    this.watch?.toggle(false);
     this.toggleLab(false);
     this.floatAtSurface=false;
     const cam=this.app.camera,c=this.app.cine;
@@ -255,6 +277,7 @@ export class Expedition {
   }
 
   async regenerate(seed,reset=true) {
+    this.watch?.toggle(false);
     const id=this.world.habitat.id;
     const request=(this.pendingGeneration||0)+1;this.pendingGeneration=request;
     this.notice('Growing the world…');$('dive-lab').setAttribute('aria-busy','true');
@@ -287,6 +310,7 @@ export class Expedition {
     const c=this.app.cine,cam=this.app.camera;
     if([...c.keys].some(k=>['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(k))){this.setSwim(true);return;}
     dt=this.app.paused?0:dt;
+    if(this.watch?.updateCamera(dt))return;
     if(this.travel){
       const trip=this.travel,remaining=trip.total-trip.done;
       const speed=Math.max(remaining>100&&cam.position.y>-70?22:0,travelSpeed(-cam.position.y,remaining));
@@ -340,6 +364,7 @@ export class Expedition {
   }
 
   setSwim(on) {
+    this.watch?.stopFollowing();
     const c=this.app.cine;
     if(on)this.floatAtSurface=false;
     this.travel=null;$('dive-journey').hidden=true;
@@ -381,6 +406,7 @@ export class Expedition {
 
   toggleLab(force) {
     const on=force??$('dive-lab').hidden;$('dive-lab').hidden=!on;
+    if(on)this.watch?.toggle(false);
     if(on&&!this.labVisited){this.selectLabTab(this.floatAtSurface||this.app.camera.position.y>this.app.waterInterface.height?'weather':'world');this.labVisited=true;}
     $('dive-lab-toggle').setAttribute('aria-expanded',String(on));document.body.classList.toggle('lab-open',on);
     this.root.querySelector('.dive-depth').inert=on;
@@ -412,9 +438,22 @@ export class Expedition {
   setRenderingQuality(mode) {this.app.quality.adaptive=mode==='auto';if(mode!=='auto')this.app.setQualityPreset(mode);this.syncQualityButtons();this.writeURL();}
   lamp() { this.setLampMode(U.uLamp.value>0?'off':'on'); }
 
+  async toggleSound() {
+    if(!this.sound||$('sound-toggle').disabled)return;
+    $('sound-toggle').disabled=true;
+    try{
+      await this.sound.setEnabled(!this.sound.enabled);
+      $('sound-toggle').textContent=this.sound.enabled?'Mute ocean sound':'Enable ocean sound';
+      $('sound-toggle').setAttribute('aria-pressed',String(this.sound.enabled));
+      $('sound-status').textContent=this.sound.enabled?'Sound follows your depth, the weather, and nearby life. M mutes it.':'Sound is off. Enable it here or press M.';
+    }catch(error){$('sound-status').textContent='Sound could not start. You can keep exploring silently.';console.warn('Ocean sound unavailable:',error.message);}
+    finally{$('sound-toggle').disabled=false;}
+  }
+
   updateUI() {
     if(!this.active)return;
     const a=this.app;
+    this.sound?.update();
     const depth=U.uCameraWaterDepth.value,deep=smooth(70,350,depth),water=smooth(-2,3,depth);
     if(depth>0)this.lastWetTime=a.time;
     U.uLamp.value=this.lampMode==='auto'?smooth(150,380,depth):this.lampMode==='on'?1:0;
@@ -428,6 +467,7 @@ export class Expedition {
     a.post.settings.wetLens=(1-water)*Math.exp(-(a.time-(this.lastWetTime??-100))/5)*.6;
     a.post.settings.dof=false;a.post.settings.motionBlur=false;
     if(performance.now()-this.lastReadout<150)return;this.lastReadout=performance.now();
+    this.watch?.update(this.lastReadout);
     $('dive-depth-value').textContent=Math.abs(depth).toFixed(1);
     $('depth-reference').textContent=depth>=0?'BELOW THE SURFACE':'ABOVE THE SURFACE';
     $('dive-depth-value').dataset.depth=depth.toFixed(3);

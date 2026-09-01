@@ -65,7 +65,8 @@ for(const seed of [0,713,1934512951,4294967295])for(const relief of [.2,1,2.2]){
     for(const animal of animals){
       const p=faunaPose(animal,time,r),next=faunaPose(animal,time+.01,r);
       finite&&=Object.values(p).every(Number.isFinite);
-      clear&&=p.y>=oceanFloor(p.x,p.z,r)+(animal.benthic?.011:.31)&&p.y<=-2.49;
+      const ceiling=['dolphin','seal'].includes(animal.type)?-.34:-2.49;
+      clear&&=p.y>=oceanFloor(p.x,p.z,r)+(animal.benthic?.011:.31)&&p.y<=ceiling;
       stable&&=Math.hypot(next.x-p.x,next.y-p.y,next.z-p.z)<.25;
     }
     check(finite,'Fauna poses stay finite across seeds and long-running clocks.');

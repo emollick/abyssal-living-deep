@@ -5,6 +5,8 @@ import { makeFaunaPopulation, faunaPose } from '../src/underwater/OceanFauna.js'
 import { oceanFloor } from '../src/underwater/OceanDomain.js';
 import { GENERATOR_DEFAULTS, HABITATS } from '../src/underwater/WorldMath.js';
 import { MarineLife } from '../src/underwater/MarineLife.js';
+import { excursionDepth, surfaceExcursion, soundscapeMix } from '../src/underwater/OceanEcology.js';
+import { projectWildlife, sightlineClear, readJournal, recordObservation, wildlifeState } from '../src/underwater/FieldNotes.js';
 
 let checks=0;
 const check=(ok,message)=>{assert.ok(ok,message);checks++;};
@@ -44,6 +46,11 @@ check(finite(thirty.poses),'Rewinding must reset the procedural route safely.');
 const pair=new AnimalMotion([fish(0),fish(1)],still,{floor:flat});
 run(pair,3);
 check(distance(...pair.poses)>.22,'Overlapping swimmers must separate, even when their positions start identical.');
+const octopusPair=new AnimalMotion([fish(0,{behavior:'hover',scale:.22,radius:.11,personalSpace:.42,maxSpeed:.085}),fish(1,{behavior:'hover',scale:.22,radius:.11,personalSpace:.42,maxSpeed:.085})],still,{floor:flat});
+run(octopusPair,35);
+check(distance(...octopusPair.poses)>.7,'Broad, slow animals must leave room for webbed arms, not only their small body centers.');
+const nearVentOctopuses=population.filter(a=>a.type==='flapjack'&&Math.abs(a.z+724)<22&&Math.abs(a.x)<20);
+check(nearVentOctopuses.length<=3,'Overlapping water-column bands must not stack bottom-hugging octopuses on one patch.');
 
 // A school opens around a nearby hunter, then reforms after it leaves.
 const school=Array.from({length:8},(_,i)=>fish(i,{x:(i%2)*.45,z:Math.floor(i/2)*.38}));
@@ -148,9 +155,58 @@ for(const id of ['blue','kelp']){
   let upright=true;
   for(const time of [0,30,90,150,180,240,300,360,500,650]){
     life.update(time,new THREE.Vector3(0,0,100));
-    for(const animal of life.animals)upright&&=new THREE.Vector3(0,1,0).applyQuaternion(animal.mesh.quaternion).y>.95;
+    // Surface excursions pitch along the dive, but may never turn the body
+    // upside down as the horizontal circuit reverses its heading.
+    for(const animal of life.animals)upright&&=new THREE.Vector3(0,1,0).applyQuaternion(animal.mesh.quaternion).y>.20;
   }
   check(upright,`${id}: large swimmers must not roll upside-down when their routes reverse heading.`);
   life.group.traverse(o=>{o.geometry?.dispose();o.material?.dispose();if(o.isInstancedMesh)o.dispose();});
 }
-console.log(`${checks} animal behavior checks passed: cadence, pause, schooling, encounters, rock avoidance, grazing, crawling, currents and orientation.`);
+
+for(const type of ['dolphin','seal','turtle','whale']){
+  let deepest=0,shallowest=-100,last=excursionDepth(type,0,1.4,-24),continuous=true;
+  for(let i=1;i<=12000;i++){
+    const y=excursionDepth(type,i/20,1.4,-24);
+    deepest=Math.min(deepest,y);shallowest=Math.max(shallowest,y);continuous&&=Number.isFinite(y)&&Math.abs(y-last)<.18;last=y;
+  }
+  check(deepest<-23&&shallowest>-1.2,`${type}: surface excursions must leave cruising depth and approach the surface.`);
+  check(continuous,`${type}: the complete dive cycle must remain continuous, including the loop seam.`);
+  check(surfaceExcursion(type,60,1)!==surfaceExcursion(type,60,5),`${type}: individual phases should stagger the surface trips.`);
+}
+check(surfaceExcursion('reefshark',100)===0,'Fish should not inherit air-breathing surface cycles.');
+
+// A field journal must record visible encounters, not animals behind the lens,
+// under a rock, beyond visible range, or through the water surface.
+const view={x:0,y:-5,z:0,fx:0,fy:0,fz:-1,rx:1,ry:0,rz:0,ux:0,uy:1,uz:0,tan:.53,aspect:16/9,range:50};
+const visible={id:'test',type:'parrotfish',x:0,y:-5,z:-8,span:.8};
+check(projectWildlife(visible,view)?.distance===8,'A visible animal should be offered for observation.');
+check(projectWildlife({...visible,z:8},view)===null,'Animals behind the camera must not be observed.');
+check(projectWildlife({...visible,x:40},view)===null,'Animals outside the frame must not be observed.');
+check(projectWildlife({...visible,z:-60},view)===null,'Animals beyond water visibility must not be observed.');
+check(projectWildlife({...visible,span:.001},view)===null,'Unresolvable specks must not count as a sighting.');
+check(projectWildlife(visible,{...view,y:2})===null,'The waterline must not identify submerged animals from above.');
+check(projectWildlife(visible,{...view,daylight:0,lamp:0,glow:0})===null,'An unlit animal in darkness must not be identified.');
+check(projectWildlife(visible,{...view,daylight:0,lamp:1,glow:0})!==null,'A nearby animal illuminated by the dive light can be identified.');
+check(sightlineClear(view,visible,()=>-12),'An open line of sight should remain observable.');
+check(!sightlineClear(view,visible,()=>-12,[{x:0,y:-5,z:-4,rx:1,ry:1,rz:1}]),'A rock between lens and animal must hide it.');
+check(!sightlineClear(view,visible,(_x,z)=>z<-3&&z>-5?-3:-12),'A canyon ridge must block observation.');
+check(sightlineClear(view,visible,()=>-12,[{x:0,y:-5,z:-14,rx:1,ry:1,rz:1}]),'A rock behind the animal must not hide it.');
+const store={value:'bad json',getItem(){return this.value;},setItem(_key,value){this.value=value;}};
+check(readJournal(store).length===0,'A damaged journal must not break the ocean.');
+const entries=[];
+check(recordObservation(entries,visible,713,24.4,store),'The first observation must be saved.');
+check(!recordObservation(entries,visible,9,800,store),'Seeing the same animal group twice must not overwrite its first sighting.');
+check(readJournal(store)[0]?.depth===24&&readJournal(store)[0]?.seed===713,'Sightings must survive a new journal instance.');
+store.value='[{"type":"__proto__"},{"type":"parrotfish","seed":1,"depth":-5},{"type":"parrotfish","depth":9}]';
+check(readJournal(store).length===1&&readJournal(store)[0].depth===0,'Stored data must be bounded, deduplicated, and limited to known animals.');
+check(recordObservation(entries,{type:'crab'},713,32,{setItem(){throw new Error('disabled');}}),'Storage disabled must still allow observations during the visit.');
+check(wildlifeState({type:'parrotfish',pose:{feeding:.8}})==='Grazing','Observation should describe actual feeding state.');
+check(wildlifeState({type:'crab',benthic:true,pose:{speed:0}})==='Resting on the bottom','Still bottom dwellers must not be described as swimming.');
+
+const surfaceMix=soundscapeMix({depth:-2,wind:20}),deepMix=soundscapeMix({depth:1400,reef:1});
+check(surfaceMix.surf>deepMix.surf*10&&surfaceMix.cutoff>deepMix.cutoff,'Surface surf must become quieter and muffled with depth.');
+check(deepMix.reef<.0001,'Reef crackle must not follow the listener into the abyss.');
+check(soundscapeMix({paused:true}).master===0&&soundscapeMix({hidden:true}).master===0,'Pause and hidden tabs must silence the soundscape.');
+check(soundscapeMix({volume:0}).master===0,'Zero volume must silence every layer.');
+check(Object.values(soundscapeMix({depth:5000,wind:60,storm:1,reef:3,whale:8,volume:3})).every(Number.isFinite),'Sound mixes must stay finite at the dial extremes.');
+console.log(`${checks} animal behavior and observation checks passed: motion, surface excursions, sightlines, journal persistence, and depth-aware sound.`);

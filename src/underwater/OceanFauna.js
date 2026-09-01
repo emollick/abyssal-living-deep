@@ -4,6 +4,7 @@ import { oceanFloor, transectPose, SITE_ORIGINS } from './OceanDomain.js';
 import { creatureGeometry } from './FaunaGeometry.js';
 import { waterMaterial } from './UnderwaterMaterial.js';
 import { AnimalMotion } from './AnimalMotion.js';
+import { excursionDepth } from './OceanEcology.js';
 
 export const FAUNA = {
   butterflyfish:{name:'Butterflyfish',motion:5,behavior:'forage',size:.15,skin:0},
@@ -41,6 +42,10 @@ const RHYTHMS={
   vampire:[.07,.28],flapjack:[.085,.4],octopus:[.05,.4],crab:[.085,.5],shrimp:[.13,1.5],
   ventshrimp:[.026,.5],isopod:[.022,.35],cucumber:[.004,.1],
 };
+// Separation includes fins and the spread of webbed arms. Rock/floor clearance
+// still uses the smaller body radius, so a grazer can reach its feeding patch.
+const PERSONAL_SPACE={butterflyfish:1,parrotfish:1.05,reefshark:1.5,tuna:1.3,sunfish:1.55,dolphin:1.5,seal:1.4,
+  vampire:1.8,flapjack:1.9,octopus:1.7,crab:1.2};
 
 // Broad, overlapping depth communities rather than a hard scene switch.
 // Sizes approximate natural body lengths; abundance is composed for exploration,
@@ -88,6 +93,7 @@ export function makeFaunaPopulation(input={}) {
         maxSpeed:RHYTHMS[type]?.[0]??0,beat:RHYTHMS[type]?.[1]??0,
         pursuer:type==='reefshark'||type==='tuna',reverse:spec.behavior==='jet',sideways:type==='crab',
         radius:scale*(type==='sunfish'?.85:spec.benthic?.45:.50),turnRate:spec.behavior==='cruise'?.85:1.4,
+        personalSpace:scale*(PERSONAL_SPACE[type]??.7),
         scale,variant:i%2,heading:heading+(rng()-.5)*.5,
         speed:(.72+rng()*.55)*(spec.behavior==='cruise'?1.4:1),
         orbit:spec.behavior==='school'?1.2:spec.behavior==='cruise'?7.0:.45,
@@ -124,6 +130,10 @@ export function makeFaunaPopulation(input={}) {
     const types=communityAt(depth).types,zone=depth<200?'slope':depth<530?'upper-twilight':depth<930?'lower-twilight':'midnight';
     for(let k=0;k<types.length;k++){
       const type=types[k],spec=FAUNA[type],side=(k-(types.length-1)/2)*1.8,distance=5.5+(k%2)*4.5;
+      // Column bands share a horizontal position. Repeating a bottom-hugging
+      // species in every band stacked all of them on the same seabed patch.
+      // The vent habitat and slope transect already place these octopuses.
+      if(column&&type==='flapjack')continue;
       const x=pose.eye[0]+forward[0]*distance+right[0]*side;
       const z=pose.eye[2]+forward[1]*distance+right[1]*side;
       const y=type==='flapjack'?oceanFloor(x,z,recipe)+1.0:-depth-.9+(k%3-1)*1.05;
@@ -187,11 +197,12 @@ function faunaPosition(animal,time,recipe,out={}) {
     x+=(Math.sin(a)-Math.sin(phase))*reach;z+=(Math.cos(a)-Math.cos(phase))*reach*.73;
     activity=u>0&&u<1?6*u*(1-u):0;
   }
+  if(animal.type==='dolphin'||animal.type==='seal')y=excursionDepth(animal.type,time,phase,y);
   const floor=oceanFloor(x,z,recipe);
   if(animal.benthic)y=floor+.012;
   else{
     y=Math.max(y,floor+Math.max(.32,animal.scale*1.2));
-    y=Math.min(-2.5,y);
+    y=Math.min(animal.type==='dolphin'||animal.type==='seal'?-.35:-2.5,y);
   }
   Object.assign(out,{x,y,z,feeding,activity,stroke});
   return out;
@@ -224,6 +235,8 @@ export class OceanFauna {
       const members=this.population.filter(a=>a.type===type&&a.variant===variant);
       if(!members.length)continue;
       const spec=FAUNA[type],geometry=creatureGeometry(type,this.recipe.seed+type.length*7919+variant*313);
+      const bounds=geometry.boundingBox,size=bounds.getSize(new THREE.Vector3());
+      for(const animal of members){animal.span=Math.max(size.x,size.y,size.z)*animal.scale;animal.centerY=(bounds.min.y+bounds.max.y)*.5*animal.scale;}
       const motion=new THREE.InstancedBufferAttribute(new Float32Array(members.length*4),4);motion.setUsage(THREE.DynamicDrawUsage);geometry.setAttribute('aAnimalMotion',motion);
       const material=waterMaterial(4,{name:type,fauna:true,animalMotion:true,motion:spec.motion,skin:spec.skin,anchored:!!spec.benthic});
       const mesh=new THREE.InstancedMesh(geometry,material,members.length);

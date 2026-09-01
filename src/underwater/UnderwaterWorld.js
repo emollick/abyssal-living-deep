@@ -278,7 +278,11 @@ export class UnderwaterWorld {
       const right=new THREE.Vector3().crossVectors(U.uDiveForward.value,new THREE.Vector3(.0001,1,0)).normalize();
       cam.position.copy(camera.position).addScaledVector(right,.75);cam.position.y+=.18;
       cam.lookAt(center.copy(camera.position).addScaledVector(U.uDiveForward.value,30));
-    }else{cam.position.copy(center).addScaledVector(sun,120);cam.lookAt(center);}
+    }else{
+      const extent=this.app.expedition?.watch?.following?36:86;
+      cam.left=cam.bottom=-extent;cam.right=cam.top=extent;cam.updateProjectionMatrix();
+      cam.position.copy(center).addScaledVector(sun,120);cam.lookAt(center);
+    }
     cam.updateMatrixWorld();U.uUnderwaterShadowMode.value=lamp?1:0;
     U.uReefShadowMatrix.value.multiplyMatrices(cam.projectionMatrix,cam.matrixWorldInverse);
     const hidden=[];

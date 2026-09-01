@@ -4,6 +4,7 @@ import { paintGeometry, segment } from './ReefGeometry.js';
 import { waterMaterial } from './UnderwaterMaterial.js';
 import { seeded, TAU, floorHeight } from './WorldMath.js';
 import { AnimalMotion } from './AnimalMotion.js';
+import { excursionDepth } from './OceanEcology.js';
 
 const Z = new THREE.Vector3(0, 0, -1);
 const dummy = new THREE.Object3D(), direction = new THREE.Vector3();
@@ -252,14 +253,18 @@ export class MarineLife {
         mesh.quaternion.setFromUnitVectors(Z,direction);mesh.rotateZ(Math.sin(t)*.07);mesh.scale.setScalar(index===0?0.58:0.40);
       } else if(type==='turtle') {
         const t=time*0.04+index*2.3;
-        mesh.position.set(Math.sin(t)*16, -15-index*3+Math.sin(t*2)*1.4,Math.cos(t)*19-4);
-        direction.set(Math.cos(t)*16,Math.cos(t*2)*2.8,-Math.sin(t)*19).normalize();
+        const y=excursionDepth(type,time,a.phase,-15-index*3+Math.sin(t*2)*1.4);
+        const nextY=excursionDepth(type,time+.1,a.phase,-15-index*3+Math.sin((t+.004)*2)*1.4);
+        mesh.position.set(Math.sin(t)*16,y,Math.cos(t)*19-4);
+        direction.set(Math.cos(t)*16,(nextY-y)/.004,-Math.sin(t)*19).normalize();
         mesh.rotation.set(0,-Math.atan2(direction.z,direction.x),0);mesh.rotateZ(Math.asin(direction.y));mesh.rotateX(Math.sin(t)*.07);
         mesh.scale.setScalar(0.35+index*0.055);
       } else if(type==='whale') {
         const t=time*.018;
-        mesh.position.set(Math.sin(t)*36,-35+Math.sin(t*1.3)*2.5,-11+Math.cos(t)*20);
-        direction.set(Math.cos(t)*36,Math.cos(t*1.3)*3.25,-Math.sin(t)*20).normalize();
+        const y=excursionDepth(type,time,a.phase,-35+Math.sin(t*1.3)*2.5);
+        const nextY=excursionDepth(type,time+.1,a.phase,-35+Math.sin((t+.0018)*1.3)*2.5);
+        mesh.position.set(Math.sin(t)*36,y,-11+Math.cos(t)*20);
+        direction.set(Math.cos(t)*36,(nextY-y)/.0018,-Math.sin(t)*20).normalize();
         mesh.rotation.set(0,-Math.atan2(direction.z,direction.x),0);mesh.rotateZ(Math.asin(direction.y));mesh.rotateX(Math.sin(t)*.07);
         mesh.scale.setScalar(.74);
       } else if(type==='jelly') {
@@ -269,6 +274,9 @@ export class MarineLife {
       if(type!=='jelly'){
         const glide=.25+.75*Math.pow(.5+.5*Math.sin(time*.19+a.phase),2);
         mesh.material.uniforms.uAnimalMotion.value.set(time*(type==='whale'?.9:type==='manta'?1.4:1.7)+a.phase,glide,0,0);
+        const delta=time-(a.previousTime??time),p=a.pose||(a.pose={});
+        const vx=delta>0?(mesh.position.x-(p.x??mesh.position.x))/delta:0,vy=delta>0?(mesh.position.y-(p.y??mesh.position.y))/delta:0,vz=delta>0?(mesh.position.z-(p.z??mesh.position.z))/delta:0;
+        Object.assign(p,{x:mesh.position.x,y:mesh.position.y,z:mesh.position.z,vx,vy,vz,speed:Math.hypot(vx,vy,vz),effort:glide});a.previousTime=time;
       }
     }
   }

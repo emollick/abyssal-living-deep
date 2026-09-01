@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import * as THREE from 'three';
 import { HABITATS, seeded, parseSeed, normalizeGenerator, floorHeight, currentAt, cameraPose, constrainSwimmer } from '../src/underwater/WorldMath.js';
-import { createHabitatGeometry, highestSurfaceAt, Batch, SCENERY_BATCH_VERTICES } from '../src/underwater/ReefGeometry.js';
+import { createHabitatGeometry, highestSurfaceAt, Batch, SCENERY_BATCH_VERTICES, seagrassGeometry } from '../src/underwater/ReefGeometry.js';
 import { MarineLife } from '../src/underwater/MarineLife.js';
 
 let checks=0;
@@ -17,6 +17,12 @@ check(highestSurfaceAt(anchorSurface,4,4,-8)===-8,'Outside a rock, colonies must
 anchorSurface.setIndex([2,1,0]);
 check(Math.abs(highestSurfaceAt(anchorSurface,1,.5,-10)+2)<1e-6,'Indexed, reversed triangles below sea level must still give a correct attachment height.');
 anchorSurface.dispose();
+
+const blade=seagrassGeometry(.6,.025,.3,1.2),bladeP=blade.attributes.position;
+check(bladeP.getY(0)===0&&bladeP.getY(1)===0,'Seagrass blades must start at their attached base.');
+check(bladeP.array.every(Number.isFinite)&&blade.attributes.normal.array.every(Number.isFinite),'Curved seagrass geometry must be finite.');
+check(bladeP.getY(bladeP.count-1)>.4&&bladeP.getY(bladeP.count-1)<.6,'Seagrass blades should arch instead of forming rigid vertical strips.');
+blade.dispose();
 
 // Dense scenery must retain its exact vertices and triangle winding while
 // keeping each temporary merge and its indices within a small memory budget.
@@ -69,6 +75,8 @@ check(digest(c.group)!==hash,'A new seed must produce a different actual mesh.')
 
 for(const habitat of HABITATS) {
   const world=createHabitatGeometry(habitat);
+  if(['reef','kelp'].includes(habitat.id))check(world.group.getObjectByName('Seagrass meadows')?.geometry.attributes.position.count>1000,'Shallow sandy margins should have generated seagrass cover.');
+  else check(!world.group.getObjectByName('Seagrass meadows'),'Seagrass must not grow in the deep, dark habitats.');
   if(habitat.id==='reef')check(world.group.getObjectByName('Coral colonies')?.geometry.attributes.position.count>10000,'The reef must grow actual coral geometry.');
   if(habitat.id==='kelp')check(world.group.getObjectByName('Swaying forest')?.geometry.attributes.position.count>10000,'The kelp forest must contain kelp, not just a seabed.');
   if(habitat.id==='deep'){
