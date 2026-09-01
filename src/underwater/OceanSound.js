@@ -51,8 +51,7 @@ export class OceanSound {
   update(){
     if(!this.context||!this.enabled)return;
     const a=this.app,w=a.underwater,p=a.camera.position,depth=a.waterInterface.height-p.y;
-    const origin=w.sites.get('reef').habitat.origin;
-    const reef=Math.exp(-((p.x-origin[0])**2+(p.z-origin[1])**2)/6500)*w.settings.life;
+    const reef=(w.localBiome?.coral??0)*w.settings.life;
     const whale=w.sites.get('blue').life.animals.find(animal=>animal.type==='whale');
     let proximity=0;
     if(whale){const pos=whale.mesh.position,site=w.sites.get('blue').habitat.origin;proximity=Math.max(0,1-Math.hypot(p.x-pos.x-site[0],p.y-pos.y,p.z-pos.z-site[1])/220);}

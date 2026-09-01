@@ -54,7 +54,7 @@ function appendage(start,mid,end,width,thickness,color) {
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();return solid(g,color);
 }
 
-function fishGeometry() {
+export function fishGeometry() {
   const body = new THREE.SphereGeometry(1, 18, 10);
   const pos = body.attributes.position;
   for (let i = 0; i < pos.count; i++) {
@@ -234,8 +234,8 @@ export class MarineLife {
 
   update(time,cameraPosition,environment={}) {
     const h=this.habitat, deep=h.id==='deep',blue=h.id==='blue',kelp=h.id==='kelp';
-    this.schoolMotion.advance(time,environment);
     if(environment.visible===false)return;
+    this.schoolMotion.advance(time,environment);
     for(let i=0;i<this.fishCount;i++) {
       const f=this.fishData[i],p=this.schoolMotion.poses[i];
       dummy.position.set(p.x-this.origin[0],p.y,p.z-this.origin[1]);

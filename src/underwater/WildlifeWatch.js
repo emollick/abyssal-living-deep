@@ -14,6 +14,7 @@ function readPosition(s){
 export function collectWildlife(world) {
   const result=[];
   for(const a of world.fauna.population)result.push(readPosition({...a,id:`fauna-${a.id}`,pose:world.fauna.poses[a.id]}));
+  for(const a of world.regionalLife?.observables||[])result.push(readPosition({...a,id:`regional-${a.uid}`}));
   for(const [id,site] of world.sites){
     if(!site.group.visible)continue;
     for(const a of site.life.animals){

@@ -9,6 +9,10 @@ import { connectedHabitat, oceanFloor, smooth } from './OceanDomain.js';
 import { OceanDynamics, DEEP_SOURCE, flowAt } from './OceanDynamics.js';
 import { createOceanTerrain, createPelagicLife } from './OceanTerrain.js';
 import { OceanFauna } from './OceanFauna.js';
+import { BiomeScenery } from './BiomeScenery.js';
+import { BiomeWildlife } from './BiomeWildlife.js';
+import { biomeAt } from './BiomeLayout.js';
+import { RockField } from './AnimalMotion.js';
 import { OCEAN_COUPLING_GLSL } from '../ocean/OceanCouplingGLSL.js';
 
 const VOLUME_FRAG = /* glsl */ `
@@ -140,11 +144,13 @@ export class UnderwaterWorld {
     const recipe={...settings,seed,worldSeed:seed},sites=new Map(),worldRocks=[];
     // Population controls do not change the rocks or plants. Keep their meshes
     // and only replace animal populations when the terrain recipe is unchanged.
-    const reuseScenery=this.root&&seed===this.seed&&['relief','life','height'].every(key=>settings[key]===this.recipe[key]);
+    const reuseScenery=this.root&&seed===this.seed&&['relief','life','height','habitatScale'].every(key=>settings[key]===this.recipe[key]);
     const root=reuseScenery?this.root:new THREE.Group(),staged=[];
-    let snow,pelagic,fauna;
+    let snow,pelagic,fauna,terrain,scenery,regionalLife;
     try {
-      if(!reuseScenery){root.name='One connected ocean';root.add(createOceanTerrain(recipe));}
+      terrain=reuseScenery?this.terrain:createOceanTerrain(recipe);
+      scenery=reuseScenery?this.scenery:new BiomeScenery(recipe);
+      if(!reuseScenery){root.name='One connected ocean';root.add(terrain,scenery.group);}
       for(const base of HABITATS) {
         const habitat=connectedHabitat(base,seed,settings);
         const next=reuseScenery?{group:this.sites.get(base.id).group,ventPositions:[],rocks:this.sites.get(base.id).localRocks}:createHabitatGeometry(habitat);
@@ -163,19 +169,22 @@ export class UnderwaterWorld {
       if(!reuseScenery)root.add(snow);
       pelagic=createPelagicLife(recipe);staged.push(pelagic.group);
       fauna=new OceanFauna(recipe,worldRocks);staged.push(fauna.group);
+      regionalLife=new BiomeWildlife(recipe);staged.push(regionalLife.group);
     } catch(error) {
       staged.forEach(disposeTree);if(!reuseScenery)disposeTree(root);
       throw error;
     }
     if(reuseScenery){
       for(const [siteId,site] of sites){const old=this.sites.get(siteId).life.group;site.group.remove(old);disposeTree(old);site.group.add(site.life.group);}
-      for(const old of [this.pelagic.group,this.fauna.group]){root.remove(old);disposeTree(old);}
+      for(const old of [this.pelagic.group,this.fauna.group,this.regionalLife.group]){root.remove(old);disposeTree(old);}
     }else if(this.root){
       this.scene.remove(this.root);disposeTree(this.root);
     }
-    root.add(pelagic.group,fauna.group);
+    root.add(pelagic.group,fauna.group,regionalLife.group);
     this.app.renderer.renderLists.dispose();
     this.root=root;this.scene.add(root);this.sites=sites;this.snow=snow;this.pelagic=pelagic;this.fauna=fauna;
+    this.terrain=terrain;this.scenery=scenery;this.regionalLife=regionalLife;this.baseRocks=worldRocks;this.rockRevision=-1;
+    if(!reuseScenery)this.biomeSmoke=null;
     this.shadowDirty=true;
     this.settings=settings;this.seed=seed;this.recipe=recipe;this.habitat=sites.get(id)?.habitat||sites.get('reef').habitat;this.generation++;
     this.life=sites.get(this.habitat.id).life;
@@ -223,11 +232,23 @@ export class UnderwaterWorld {
 
   update(time,camera) {
     if(!camera)return;
+    if(this.terrain.floorDetail.update(camera.position))this.shadowDirty=true;
+    this.scenery.range=({potato:112,low:132,medium:155,high:180,ultra:190})[this.app.quality.presetName]??190;
+    if(this.scenery.update(camera.position))this.shadowDirty=true;
+    if(this.rockRevision!==this.scenery.revision){
+      this.rockField=new RockField([...this.baseRocks,...this.scenery.rocks]);this.fauna.motion.rocks=this.rockField;
+      for(const site of this.sites.values())site.life.schoolMotion.rocks=this.rockField;
+      if(this.biomeSmoke){this.root.remove(this.biomeSmoke);disposeTree(this.biomeSmoke);this.biomeSmoke=null;}
+      if(this.scenery.vents.length){this.biomeSmoke=this.makeParticles(this.recipe,this.scenery.vents,true);this.root.add(this.biomeSmoke);}
+      this.rockRevision=this.scenery.revision;
+    }
     const w=this.app.weather?.state;
     const el=w?.sunElevation??0.66,cover=w?.cloudCoverage??0.12,storm=w?.storm??0;
     const depth=Math.max(0,-camera.position.y),deep=smooth(100,900,depth);
-    const kelp=Math.exp(-((camera.position.x-150)**2+(camera.position.z-110)**2)/18000)*(1-smooth(40,110,depth));
-    const reef=Math.exp(-((camera.position.x+140)**2+(camera.position.z-140)**2)/23000)*(1-smooth(40,110,depth));
+    const biome=biomeAt(camera.position.x,camera.position.z,this.recipe);
+    this.localBiome=biome;
+    const kelp=biome.kelp*(1-smooth(40,110,depth));
+    const reef=biome.reef*(1-smooth(40,110,depth));
     U.uWaterTint.value.set(.004+kelp*.021+reef*.002,.060+kelp*.025+reef*.045,.13-kelp*.065+reef*.015).lerp(new THREE.Vector3(.00007,.00015,.00024),deep);
     U.uWaterTint.value.multiplyScalar(Math.exp(-Math.max(0,depth-85)*.012));
     U.uExtinction.value.set(.027+kelp*.005,.012+kelp*.009+reef*.004,.009+kelp*.019+reef*.002).lerp(new THREE.Vector3(.031,.019,.015),deep);
@@ -242,10 +263,12 @@ export class UnderwaterWorld {
     const environment={diver:this.app.cine?.free?camera.position:null,flow:(p,t)=>flowAt(p,t+this.bornAt,w,this.settings,flowState)};
     this.fauna.update(time-this.bornAt,camera.position,environment);
     environment.hunters=this.fauna.hunters;
+    this.regionalLife.update(time-this.bornAt,camera.position,environment,this.rockField);
+    environment.hunters=[...this.fauna.hunters,...this.regionalLife.hunters];
     for(const site of this.sites.values()){
       const [x,z]=site.habitat.origin;
       this.localCamera.set(camera.position.x-x,camera.position.y,camera.position.z-z);
-      site.group.visible=Math.hypot(camera.position.x-x,camera.position.z-z)<530&&Math.abs(camera.position.y-site.habitat.eye[1])<330;
+      site.group.visible=Math.hypot(camera.position.x-x,camera.position.z-z)<250&&Math.abs(camera.position.y-site.habitat.eye[1])<180;
       environment.visible=site.group.visible;
       site.life.update(time-this.bornAt,this.localCamera,environment);
     }
@@ -286,7 +309,7 @@ export class UnderwaterWorld {
     cam.updateMatrixWorld();U.uUnderwaterShadowMode.value=lamp?1:0;
     U.uReefShadowMatrix.value.multiplyMatrices(cam.projectionMatrix,cam.matrixWorldInverse);
     const hidden=[];
-    this.root.traverse(o=>{if(o.isPoints||o.name==='Marine life'||o===this.pelagic.group){hidden.push([o,o.visible]);o.visible=false;}});
+    this.root.traverse(o=>{if(o.isPoints||o.name==='Marine life'||o.name==='Unbroken seabed'||o===this.pelagic.group){hidden.push([o,o.visible]);o.visible=false;}});
     this.scene.overrideMaterial=this.shadowMaterial;
     r.setRenderTarget(this.shadowTarget);r.setClearColor(0xffffff,1);r.clear();r.render(this.scene,cam);
     this.scene.overrideMaterial=null;hidden.forEach(([o,v])=>o.visible=v);

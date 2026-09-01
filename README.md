@@ -17,6 +17,12 @@ A procedural expansion of [ABYSSAL by Token-Gremlin](https://github.com/Token-Gr
 
 All four habitats exist together in one generated landscape. **Dive into the reef** begins the first descent from the opening view. The site buttons travel between habitats; they do not replace the scene or reset the weather. **Ascend** returns to a floating view at sea level. **Descend** follows the canyon from the shelf, or dives directly when you are already over the trench. Choose a depth stop, interrupt a journey with **Stop here**, or swim freely with **Q / E** to descend and ascend.
 
+The arrival points sit inside broad, explorable biomes. Coral ridges and seagrass channels extend across the western shelf; kelp stands and clearings occupy the east. Offshore ridges descend into a rolling abyssal floor with scattered vent belts. Habitat fields, water colour, plants and wildlife continue between and beyond the arrival points. The navigable ocean extends 2.2 km from its centre, with the existing 1,400-metre descent.
+
+**Explore**, or **C**, opens a habitat chart showing your position and eleven further destinations, including outer reef gardens, forest clearings and distant vent fields. Choose a marker or destination and **Travel there** to cross the ocean continuously. These destinations are places in the same landscape, not separate scenes. You can stop anywhere and take over; no chart route is required to find living habitat.
+
+Detailed seabed tiles and instanced scenery follow a bounded neighbourhood around the camera. Tile seeds depend on world coordinates, so returning to a place restores the same terrain and colonies. Animal communities occupy the wider seabed and water column, and work with Observe and the field journal. The lab's population readout counts animals currently loaded, rather than implying that every distant animal is simulated at once.
+
 **World lab** has four control tabs: **World** for seeds, terrain and living cover; **Life** for animal populations; **Water** for visibility, currents, dive lighting and upwelling; and **Weather** for sky, wind, waves and ocean events. It opens to Weather at sea level and keeps the selected tab during your visit. Arrow keys move between tabs; Escape closes the lab.
 
 Numeric and text seeds are reproducible; **New seed** grows another landscape. **Reset recipe** restores the seed, world, weather and automatic dive-light defaults. **Copy world link** includes the seed, starting view, procedural dials, weather settings, dive-light override and any explicit quality choice. **View & controls**, beneath each tab, contains the waterline view, rendering quality and help.
@@ -52,6 +58,7 @@ The interface keeps the dive title, nearby animals and depth in view. Routine ac
 - **Terrain relief** changes the seeded seafloor and rock formations.
 - **Living cover** rebuilds the density of coral, kelp and benthic life.
 - **Kelp height** rebuilds the forest canopy, wherever you are in the ocean.
+- **Habitat scale** changes the width of ridges, clearings and vent belts across the wider biomes; it does not shrink the explorable ocean.
 - **Animal abundance** scales the animal population, including swimmers and bottom dwellers. Zero removes them all.
 - **Hunters** changes the abundance of sharks, tuna, dragonfish, anglerfish and gulper eels.
 - **Bottom dwellers** changes octopuses, crabs, sea stars, urchins, isopods, sea cucumbers, sea pens and vent shrimp independently of swimming animals.
@@ -81,6 +88,7 @@ Geometry dials rebuild on release. Population dials replace the animal communiti
 | **Mouse wheel** | Zoom in Swim mode |
 | **1–4** | Travel to a habitat in the same ocean |
 | **G / R** | Open world lab / generate a new seed |
+| **Explore / C** | Open the habitat chart and travel to further destinations |
 | **O / J** | Observe wildlife / open the field journal |
 | **M** | Enable or mute ocean sound |
 | **F / P / H** | Toggle swimming / pause simulation / hide controls |
@@ -135,9 +143,14 @@ Deploy `dist/` to any static host. `netlify.toml` contains the Netlify build set
 ?site=reef&seed=713&surface=waterline
 ?site=deep&seed=713&lamp=off
 ?site=reef&seed=713&light=storm&preset=high&adaptive=0
+?place=reef-ridges&seed=713
+?place=kelp-outer&seed=694111&habitatScale=1.4
+?place=far-vents&seed=713&lamp=on
 ```
 
 Supported sites: `reef`, `kelp`, `blue`, `deep`. A fresh visit, including a seed-only link, starts floating at sea level. An explicit `site` link starts inside that habitat; `surface=1` instead starts at sea level above it, and `surface=waterline` puts the lens at the air/water boundary. `depth=200` starts on the canyon route. The default world seed is 713. Numeric recipes are clamped to the supported dial ranges, and text seeds become a stable 32-bit seed. The original quality and profiling parameters continue to work; see the [upstream documentation](docs/UPSTREAM.md).
+
+An explicit `place` link starts at a chart destination. Copying a link after arriving there preserves that destination and recipe. A `surface=1` override still starts at sea level. Place identifiers are `reef-ridges`, `reef-channels`, `reef-gardens`, `kelp-avenues`, `kelp-clearings`, `kelp-outer`, `shelf-edge`, `canyon-wall`, `vent-belt`, `basalt-plain`, and `far-vents`.
 
 ## Code
 
@@ -149,6 +162,10 @@ The existing rendering pipeline remains in `src/core`, `src/ocean`, `src/sky`, `
 | `OceanDomain.js` | Continuous bathymetry, initial view, floating eye height, habitat placement, depth stops and safe routes |
 | `OceanDynamics.js` | Depth-dependent currents, upwelling, nutrient transport and seafloor pulses |
 | `OceanTerrain.js` | Continuous shelf and canyon, wall colonies and midwater life |
+| `WorldNoise.js` / `BiomeLayout.js` | Coordinate-based seeds, continuous habitat fields, region names and chart destinations |
+| `BiomeScenery.js` | Bounded scenery tiles, reusable generated forms, habitat cover and vent locations |
+| `BiomeWildlife.js` | Local seabed and water-column communities with shared rendering pools |
+| `ExpeditionChart.js` | Habitat chart, live position, destination selection and journey controls |
 | `WaterInterface.js` | Actual-wave probe and continuous air/water compositing |
 | `ReefGeometry.js` | Generated terrain, reef shelves, coral, kelp, sponges and mineral chimneys |
 | `MarineLife.js` | Shoals, rays, turtles, whales and jellyfish |
@@ -164,6 +181,8 @@ The existing rendering pipeline remains in `src/core`, `src/ocean`, `src/sky`, `
 | `Expedition.js` | World lab, sharing, exploration controls and habitat selection |
 
 Logic tests cover the sea-level entry, explicit dive links, floating-camera behavior, coral attachment, all habitat-to-habitat routes across multiple seeds and terrain settings, agreement between rendered terrain and collision height, pause invariants, and effects in both directions. Fauna checks cover distinct anatomy, finite geometry, repeatable seeds, population controls, encounters inside the actual view at depth stops, seafloor clearance and continuous motion. They do not replace visual testing. Inspect all habitats and depth communities, complete ascent/descent journeys, the waterline, and clear/dusk/storm/night conditions. Keep the source free of external art assets.
+
+Biome checks sample kilometre-long cross-sections away from arrival points, every pair of chart destinations across seeds and extreme terrain settings, shared tile edges and normals, bounded caches, reproducible return journeys, and population/cover controls outside the original habitats. These checks establish generated coverage and navigation behavior, not measured ecological realism or phone hardware performance.
 
 ## Credits and license
 

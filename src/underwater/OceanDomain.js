@@ -1,5 +1,6 @@
 // The shelf and trench are a single height field. Navigation and geometry use
 // this function together, so travelling to a new depth cannot swap the floor.
+import { fieldNoise } from './WorldNoise.js';
 export const SITE_ORIGINS = {
   reef: [-140, 140], kelp: [150, 110], blue: [0, -170], deep: [0, -760],
 };
@@ -18,7 +19,7 @@ export function initialView(params) {
     const depth=clamp(Number(raw),0,MAX_DEPTH);
     return depth>1?{kind:'depth',depth}:{kind:'surface',clearance:SURFACE_EYE_HEIGHT};
   }
-  if(params.has('site')||params.get('surface')==='0')return {kind:'habitat'};
+  if(params.has('site')||params.has('place')||params.get('surface')==='0')return {kind:'habitat'};
   return {kind:'surface',clearance:SURFACE_EYE_HEIGHT};
 }
 
@@ -44,7 +45,14 @@ export function oceanFloor(x, z, recipe = {}) {
   const escarpment = Math.sin(x * 0.043 + Math.sin(z * 0.026) * 2.7 + phase)
     * Math.sin(z * 0.062 + phase) * 11 * Math.sin(trench * Math.PI);
   const shoulder=smooth(19,77,Math.abs(x-Math.sin(z*.006)*7))*Math.sin(trench*Math.PI)*340;
-  return -depth + shoulder + (broad * (1 + trench * 0.5) + dunes + escarpment - channel * 1.5 * (1 - trench)) * relief;
+  const nearest=Math.min(Math.hypot(x+140,z-140),Math.hypot(x-150,z-110),Math.hypot(x,z+170),Math.hypot(x,z+760));
+  const scale=recipe.habitatScale??1,nx=x/scale,nz=z/scale;
+  const weathering=fieldNoise(nx/140,nz/180,seed+903);
+  const ridges=Math.max(0,Math.sin(nx*.039+Math.sin(nz*.013)*2+phase))**3;
+  const shelfRidges=(1-shelfBreak)*(ridges*(3+weathering*5)-weathering*1.4);
+  const basaltRidges=trench*(ridges*2.8+(weathering-.5)*5);
+  const widerRelief=(shelfRidges+basaltRidges)*smooth(95,155,nearest);
+  return -depth + shoulder + (broad * (1 + trench * 0.5) + dunes + escarpment - channel * 1.5 * (1 - trench)+widerRelief) * relief;
 }
 
 export function connectedHabitat(base, seed, settings = {}) {
@@ -122,7 +130,7 @@ export function routeBetween(from, destination, recipe = {}) {
   const arrivalClearance=clamp(to[1]-oceanFloor(to[0],to[2],recipe),1.6,5);
   for (let i = 1; i < points.length; i++) {
     const a = points[i-1], b = points[i];
-    const steps = Math.max(1, Math.ceil(Math.hypot(...b.map((v,j)=>v-a[j])) / 22));
+    const steps = Math.max(1, Math.ceil(Math.hypot(...b.map((v,j)=>v-a[j])) / 8));
     for (let n = 1; n <= steps; n++) {
       const t=n/steps, p=b.map((v,j)=>a[j]+(v-a[j])*t);
       const remaining=Math.hypot(p[0]-to[0],p[1]-to[1],p[2]-to[2]);

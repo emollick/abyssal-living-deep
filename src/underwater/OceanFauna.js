@@ -35,7 +35,7 @@ export const FAUNA = {
 };
 
 // Exploration-scale swimming speeds and rhythms, not a measured animal model.
-const RHYTHMS={
+export const RHYTHMS={
   butterflyfish:[.30,2.8],parrotfish:[.45,1.8],reefshark:[1.15,.85],tuna:[1.35,1.7],
   sunfish:[.24,.55],dolphin:[1.55,.75],seal:[.90,.85],lanternfish:[.18,3.2],hatchetfish:[.13,3],
   dragonfish:[.12,.65],anglerfish:[.065,.50],gulpereel:[.16,.65],squid:[.62,.6],
@@ -44,7 +44,7 @@ const RHYTHMS={
 };
 // Separation includes fins and the spread of webbed arms. Rock/floor clearance
 // still uses the smaller body radius, so a grazer can reach its feeding patch.
-const PERSONAL_SPACE={butterflyfish:1,parrotfish:1.05,reefshark:1.5,tuna:1.3,sunfish:1.55,dolphin:1.5,seal:1.4,
+export const PERSONAL_SPACE={butterflyfish:1,parrotfish:1.05,reefshark:1.5,tuna:1.3,sunfish:1.55,dolphin:1.5,seal:1.4,
   vampire:1.8,flapjack:1.9,octopus:1.7,crab:1.2};
 
 // Broad, overlapping depth communities rather than a hard scene switch.

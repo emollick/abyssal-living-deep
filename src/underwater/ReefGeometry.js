@@ -165,7 +165,7 @@ function branchCoral(batch,x,y,z,size,color,rng,fan=false) {
   for(let i=0;i<tint.count;i++)tint.setXYZ(i,tint.getX(i)*detail.getX(i),tint.getY(i)*detail.getY(i),tint.getZ(i)*detail.getZ(i));
 }
 
-function growBranchCoral(batch, x, y, z, size, color, rng, fan = false) {
+function growBranchCoral(batch, x, y, z, size, color, rng, fan = false, levels = 4) {
   const origin = new THREE.Vector3(x, y, z);
   const angle = rng() * TAU;
   const recurse = (start, dir, length, radius, level) => {
@@ -201,7 +201,7 @@ function growBranchCoral(batch, x, y, z, size, color, rng, fan = false) {
   for(let j=0;j<trunks;j++) {
     const a=angle+j/trunks*TAU;
     const dir=fan?new THREE.Vector3(Math.sin(angle)*(j-1)*0.8,1,Math.cos(angle)*(j-1)*0.8):new THREE.Vector3(Math.cos(a)*0.55,0.7+rng()*0.35,Math.sin(a)*0.55);
-    recurse(crown,dir.normalize(),size*(fan?.28:.27),size*(fan?.025:.041),4);
+    recurse(crown,dir.normalize(),size*(fan?.28:.27),size*(fan?.025:.041),levels);
   }
 }
 
@@ -455,4 +455,60 @@ export function createHabitatGeometry(habitat) {
   brains.finish(group, 'Brain coral gardens');
   plants.finish(group,'Swaying forest');luminous.finish(group,'Tube-worm crowns');chimneys.finish(group,'Sulfide chimneys');
   return { group, ventPositions, rocks:rockColliders };
+}
+
+// Shared, fully procedural forms for the wider biomes. Each local stand chooses
+// its own proportions, orientation and tint; the expensive anatomy is reused.
+export function createBiomeForm(type,variant=0) {
+  const rng=seeded(76031+variant*977+type.length*513),batch=new Batch(null);
+  let kind=2,pattern=0;
+  if(type==='rock'||type==='brain'){
+    const g=rockGeometry(21+variant*79);paintGeometry(g,'#ffffff',rng);
+    return {geometry:g,kind:type==='rock'?1:2,pattern:type==='brain'?1:0};
+  }
+  if(type==='coral'||type==='fan')growBranchCoral(batch,0,0,0,1,'#ffffff',rng,type==='fan',3);
+  if(type==='plate'){
+    for(let i=0;i<3;i++){
+      const y=.18+i*.22;batch.add(segment(new THREE.Vector3(0,0,0),new THREE.Vector3(i*.10,y,0),.09,.04,7),'#ded7c4',rng);
+      const g=plateGeometry(1-i*.16,rng()*6);g.translate(i*.10,y,0);batch.add(g,'#ffffff',rng);
+    }
+  }
+  if(type==='kelp'){
+    kind=3;
+    for(let i=0;i<2;i++)addKelp(batch,(rng()-.5)*.25,0,(rng()-.5)*.25,24*(.86+rng()*.14),rng);
+    for(let i=0;i<7;i++){
+      const a=i/7*TAU;batch.add(segment(new THREE.Vector3(Math.cos(a)*.5,.02,Math.sin(a)*.5),new THREE.Vector3(0,.35,0),.03,.02,5),'#655438',rng);
+    }
+  }
+  if(type==='algae'){kind=3;addKelp(batch,0,0,0,1.6,rng,true);}
+  if(type==='grass'){
+    kind=3;
+    for(let shoot=0;shoot<7;shoot++){
+      const a=rng()*TAU,r=rng()*.27,cx=Math.cos(a)*r,cz=Math.sin(a)*r;
+      for(let j=0;j<5;j++){
+        const height=.3+rng()*.32,g=seagrassGeometry(height,.018+rng()*.009,height*(.3+rng()*.5),a+(rng()-.5));g.translate(cx,0,cz);
+        batch.add(g,new THREE.Color().setHSL(.20+rng()*.03,.28,.26+rng()*.07),rng,(_x,y)=>Math.max(0,y/height)**2*.11);
+      }
+    }
+  }
+  if(type==='chimney'){
+    kind=1;pattern=2;
+    const profile=Array.from({length:24},(_,i)=>{const t=i/23;return new THREE.Vector2(.12+(1-t)**.8*.8+Math.sin(t*29+variant)*.07,t*5);});
+    const g=new THREE.LatheGeometry(profile,24),p=g.attributes.position;
+    for(let i=0;i<p.count;i++){
+      const y=p.getY(i),a=Math.atan2(p.getZ(i),p.getX(i)),k=1+Math.sin(a*7+y*3.2)*.13+Math.cos(a*11-y*5)*.06;
+      p.setXYZ(i,p.getX(i)*k+Math.sin(y*.8+variant)*y*.03,y,p.getZ(i)*k);
+    }
+    g.computeVertexNormals();batch.add(g,'#b4aa8e',rng);
+  }
+  if(type==='worms'){
+    for(let i=0;i<18;i++){
+      const a=rng()*TAU,r=Math.sqrt(rng())*.55,b=new THREE.Vector3(Math.cos(a)*r,0,Math.sin(a)*r),t=b.clone().add(new THREE.Vector3((rng()-.5)*.16,.3+rng()*.7,(rng()-.5)*.16));
+      batch.add(segment(b,t,.025,.016,6),'#bcb6a7',rng);
+      const crown=new THREE.SphereGeometry(.045,8,6);crown.scale(1,1.8,1);crown.translate(t.x,t.y,t.z);batch.add(crown,'#854836',rng);
+    }
+  }
+  batch.flush();
+  const geometry=mergeParts(batch.chunks);geometry.computeBoundingSphere();geometry.computeBoundingBox();
+  return {geometry,kind,pattern};
 }

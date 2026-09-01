@@ -1,10 +1,10 @@
 import { oceanFloor, constrainToOcean } from './OceanDomain.js';
 export const TAU = Math.PI * 2;
 
-export const GENERATOR_DEFAULTS = { relief: 1, life: 1, height: 1, shoal: 1, clarity: 1, current: 1, glow: 1, upwelling: 0.65, predators: 1, benthos: 1, jellies: 0.65 };
+export const GENERATOR_DEFAULTS = { relief: 1, life: 1, height: 1, shoal: 1, clarity: 1, current: 1, glow: 1, upwelling: 0.65, predators: 1, benthos: 1, jellies: 0.65, habitatScale: 1 };
 
 export function normalizeGenerator(input = {}) {
-  const ranges = { relief: [0.2, 2.2], life: [0, 1.8], height: [0.3, 1.4], shoal: [0, 2], clarity: [0.35, 2], current: [0, 3], glow: [0, 3], upwelling: [0, 3], predators: [0, 2], benthos: [0, 2], jellies: [0, 2] };
+  const ranges = { relief: [0.2, 2.2], life: [0, 1.8], height: [0.3, 1.4], shoal: [0, 2], clarity: [0.35, 2], current: [0, 3], glow: [0, 3], upwelling: [0, 3], predators: [0, 2], benthos: [0, 2], jellies: [0, 2], habitatScale: [.5, 2] };
   const out = {};
   for (const [key, fallback] of Object.entries(GENERATOR_DEFAULTS)) {
     const n = Number(input[key]);

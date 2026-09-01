@@ -5,6 +5,9 @@ import { HABITATS, GENERATOR_DEFAULTS, parseSeed } from './WorldMath.js';
 import { constrainToOcean, transectPose, routeBetween, travelSpeed, depthZone, smooth, initialView, floatEyeHeight, SURFACE_EYE_HEIGHT } from './OceanDomain.js';
 import { WildlifeWatch } from './WildlifeWatch.js';
 import { OceanSound } from './OceanSound.js';
+import { ExpeditionChart } from './ExpeditionChart.js';
+import { explorationStops, regionName } from './BiomeLayout.js';
+import { clearRockRoute } from './AnimalMotion.js';
 import './expedition.css';
 
 const icons = {
@@ -13,6 +16,7 @@ const icons = {
   pause: '<path d="M7 4v12M13 4v12"/>',
   camera: '<path d="M3 6h4l1-2h4l1 2h4v10H3z"/><circle cx="10" cy="11" r="3"/>',
   sound: '<path d="m3 8 3 0 4-4v12l-4-4H3zm10-2q5 4 0 8"/>',
+  chart: '<circle cx="10" cy="10" r="7"/><path d="m13 6-2 6-4 2 2-6z"/>',
   lamp: '<path d="m7 4 7 3-4 10-7-3zM13 5l3-2m-1 5 3-1m-8-3 1-3"/>',
 };
 const icon = name => `<svg viewBox="0 0 20 20" aria-hidden="true">${icons[name] || ''}</svg>`;
@@ -37,6 +41,8 @@ export class Expedition {
     if(Object.keys(custom).length){app.weather.set(custom,true);this.weatherMode='custom';}
     this.enterDive();
     const entry=initialView(app.params);
+    const place=explorationStops(this.world.recipe).find(s=>s.id===app.params.get('place'));
+    if(place&&entry.kind==='habitat'){this.world.select(place.biome);this.resetView(place);this.currentPlace=place.id;this.placeLabel=place;}
     if(entry.kind==='depth')this.resetView(transectPose(entry.depth,this.world.recipe));
     if(entry.kind==='surface')this.startAtSurface(entry.clearance);
     if(app.params.get('lab')==='1')this.toggleLab(true);
@@ -44,7 +50,8 @@ export class Expedition {
     if(this.reducedMotion&&!this.floatAtSurface)this.setSwim(true);
     this.syncDials();
     this.writeURL();
-    this.watch=new WildlifeWatch(this);this.sound=new OceanSound(app);
+    this.watch=new WildlifeWatch(this);this.sound=new OceanSound(app);this.chart=new ExpeditionChart(this);
+    $('dive-chart').onclick=$('lab-chart').onclick=()=>this.chart.open();
     $('dive-observe').onclick=()=>this.watch.toggle();
     $('lab-observe').onclick=()=>this.watch.toggle(true);
     $('journal-count').onclick=()=>this.watch.showJournal();
@@ -62,6 +69,7 @@ export class Expedition {
         <nav class="dive-actions" aria-label="Explorer tools">
           <button class="dive-action" id="dive-surface" aria-label="Ascend to the surface">${icon('up')}<span>Ascend</span></button>
           <button class="dive-action" id="dive-descend" aria-label="Descend to the abyss"><span aria-hidden="true">↓</span><span>Descend</span></button>
+          <button class="dive-action" id="dive-chart" aria-label="Explore the ocean" title="Exploration chart (C)">${icon('chart')}<span>Explore</span></button>
           <button class="dive-action" id="dive-lab-toggle" aria-expanded="false" aria-controls="dive-lab">${icon('lab')}<span>World lab</span></button>
           <button class="dive-action help-action" id="dive-help-toggle" aria-label="Help and credits">?</button>
         </nav>
@@ -87,7 +95,7 @@ export class Expedition {
         <label for="world-seed">World seed</label><div class="dive-seed-row"><input id="world-seed" type="text" value="713" maxlength="40" spellcheck="false" aria-label="World seed"><button id="grow-seed" class="lab-button">Generate</button></div>
         <div class="lab-button-row"><button id="new-seed" class="lab-quiet">↻ New seed</button><button id="share-world" class="lab-quiet">Copy world link</button></div>
         <h3>Terrain & cover</h3><div id="generator-dials"></div>
-        <p class="lab-note">The same seed and dials grow the same reef, forest and trench. Geometry changes apply when you release a dial.</p></section>
+        <p class="lab-note">The same seed and dials grow the same reef, forest and trench. Habitat scale changes the width of coral ridges, forest clearings and vent belts. Changes apply when you release a dial.</p><button id="lab-chart" class="lab-quiet lab-wide">Explore the biomes</button></section>
         <section class="lab-panel" id="lab-panel-life" data-lab-panel="life" role="tabpanel" aria-labelledby="lab-tab-life" hidden>
         <div class="lab-button-row"><button id="lab-observe" class="lab-button">Observe wildlife</button><button id="journal-count" class="lab-quiet">Open field journal</button></div>
         <p class="lab-note">Observe an animal in view, follow its movement, or tap another animal to study it. Your sightings stay in the field journal.</p>
@@ -115,6 +123,7 @@ export class Expedition {
     guide.innerHTML=`<h2>Sky to abyss.</h2><p>This is one continuous ocean. Ascend vertically into the air, descend along the continental slope, or choose a depth stop. The four habitats are places in the same world. Stop a journey anywhere and take control.</p><dl><dt>Ascend / Descend</dt><dd>Travel to the surface or the 1,400-metre trench</dd><dt>W A S D</dt><dd>Swim in the direction you look</dd><dt>Drag</dt><dd>Look around; wheel to zoom</dd><dt>Q / E</dt><dd>Swim down / up, through the waterline</dd><dt>Shift</dt><dd>Move faster</dd><dt>1 – 4</dt><dd>Travel to a habitat</dd><dt>G / R</dt><dd>World lab / new seed</dd><dt>F / P / H</dt><dd>Swim or drift / pause / hide controls</dd><dt>L</dt><dd>Override the automatic deep-water light</dd></dl><p>Weather remains active at every depth. Waves, rain and storms stir the upper ocean; their motion fades as you descend. Deep upwelling carries nutrients into a surface bloom. Trigger a seafloor tremor and watch its expanding wave from above or below.</p><p>On touchscreens, drag to look and use the swimming buttons. Desktop graphics are recommended; lower the quality if your device struggles.</p><p>Everything is generated here. Travel speeds and transport times are compressed for exploration. This is an artistic simulation, not a predictive oceanographic model.</p><p>Built on <a href="https://github.com/Token-Gremlin/natural-disasters" target="_blank" rel="noopener">ABYSSAL by Token-Gremlin</a>, preserving its FFT ocean, atmosphere and extreme weather. MIT licensed.</p><button id="close-dive-guide">Back to the water</button>`;
     document.body.appendChild(guide);this.guide=guide;
     guide.querySelector('dl').insertAdjacentHTML('beforeend','<dt>O / J</dt><dd>Observe wildlife / open the field journal</dd><dt>M</dt><dd>Enable or mute ocean sound</dd>');
+    guide.querySelector('dl').insertAdjacentHTML('beforeend','<dt>C</dt><dd>Open the exploration chart</dd>');
     const observationHelp=document.createElement('p');observationHelp.textContent='Choose Observe to identify an animal in view. Follow animal brings you closer without disturbing it; Swim takes control again. Tap another visible animal or choose Next in view. After a moment of observation, its entry is saved to your field journal in this browser.';guide.querySelector('dl').after(observationHelp);
     guide.setAttribute('aria-labelledby','dive-guide-title');guide.querySelector('h2').id='dive-guide-title';
     const guideClose=document.createElement('button');guideClose.className='guide-close';guideClose.textContent='×';guideClose.setAttribute('aria-label','Close help');guideClose.autofocus=true;guideClose.onclick=()=>guide.close();guide.prepend(guideClose);
@@ -145,7 +154,7 @@ export class Expedition {
     $('share-world').onclick=()=>this.share();$('show-dive-ui').onclick=()=>this.setControlsHidden(false);
     root.querySelectorAll('[data-quality]').forEach(b=>b.onclick=()=>this.setRenderingQuality(b.dataset.quality));
     this.syncQualityButtons();
-    const shape=[['relief','Terrain relief',0.2,2.2],['life','Living cover',0,1.8],['height','Kelp height',0.3,1.4]];
+    const shape=[['relief','Terrain relief',0.2,2.2],['life','Living cover',0,1.8],['height','Kelp height',0.3,1.4],['habitatScale','Habitat scale',.5,2]];
     const water=[['clarity','Water clarity',0.35,2],['current','Current strength',0,3],['glow','Bioluminescence',0,3]];
     for(const [key,label,min,max] of shape)this.addDial('generator-dials',key,label,min,max,0.05,false);
     for(const [key,label] of [['shoal','Animal abundance'],['predators','Hunters'],['benthos','Bottom dwellers'],['jellies','Jellies & drifters']])this.addDial('fauna-dials',key,label,0,2,.05,false);
@@ -206,8 +215,8 @@ export class Expedition {
       if(e.code==='Escape'&&!$('dive-lab').hidden){e.preventDefault();e.stopImmediatePropagation();this.toggleLab(false);$('dive-lab-toggle').focus();return;}
       if(e.target.matches?.('input,textarea,select')||e.code==='Tab')return;
       if(e.target.matches?.('button')&&['Space','Enter'].includes(e.code))return;
-      if(e.repeat&&['KeyG','KeyR','KeyH','KeyP','KeyL','KeyF','KeyO','KeyJ','KeyM'].includes(e.code))return;
-      const actions={KeyG:()=>this.toggleLab(),KeyR:()=>this.newSeed(),KeyH:()=>this.setControlsHidden(!document.body.classList.contains('dive-clean')),KeyP:()=>this.pause(),KeyF:()=>this.setSwim(!this.app.cine.free),KeyL:()=>this.lamp(),KeyO:()=>this.watch?.toggle(),KeyJ:()=>this.watch?.showJournal(),KeyM:()=>this.toggleSound(),Slash:()=>this.guide.showModal(),Digit1:()=>this.visit('reef'),Digit2:()=>this.visit('kelp'),Digit3:()=>this.visit('blue'),Digit4:()=>this.visit('deep'),Escape:()=>this.watch?.open?this.watch.toggle(false):this.toggleLab(false)};
+      if(e.repeat&&['KeyG','KeyR','KeyH','KeyP','KeyL','KeyF','KeyO','KeyJ','KeyM','KeyC'].includes(e.code))return;
+      const actions={KeyC:()=>this.chart?.open(),KeyG:()=>this.toggleLab(),KeyR:()=>this.newSeed(),KeyH:()=>this.setControlsHidden(!document.body.classList.contains('dive-clean')),KeyP:()=>this.pause(),KeyF:()=>this.setSwim(!this.app.cine.free),KeyL:()=>this.lamp(),KeyO:()=>this.watch?.toggle(),KeyJ:()=>this.watch?.showJournal(),KeyM:()=>this.toggleSound(),Slash:()=>this.guide.showModal(),Digit1:()=>this.visit('reef'),Digit2:()=>this.visit('kelp'),Digit3:()=>this.visit('blue'),Digit4:()=>this.visit('deep'),Escape:()=>this.watch?.open?this.watch.toggle(false):this.toggleLab(false)};
       if(actions[e.code]){e.preventDefault();e.stopImmediatePropagation();actions[e.code]();}
       // Surface-only cinematic shortcuts must not change the submerged director.
       if(['KeyN','KeyB','KeyC'].includes(e.code))e.stopImmediatePropagation();
@@ -254,12 +263,13 @@ export class Expedition {
     this.watch?.toggle(false);
     this.toggleLab(false);
     this.floatAtSurface=false;
+    this.currentPlace=null;
     const cam=this.app.camera,c=this.app.cine;
     const route=routeBetween(cam.position,destination,this.world.recipe);
     const points=route.map(p=>new THREE.Vector3(...p));
     let total=0;for(let i=1;i<points.length;i++)total+=points[i].distanceTo(points[i-1]);
     c.setFree(false);c.keys.clear();this.started=this.app.time;
-    this.travel={points,index:1,total,done:0,speed:0,destination,title,id,vertical,ascending:destination.eye[1]>cam.position.y};
+    this.travel={points,index:1,total,done:0,speed:0,destination:{...destination,eye:[...destination.eye],look:[...destination.look]},title,id,place:destination.biome?destination.id:null,vertical,ascending:destination.eye[1]>cam.position.y};
     $('dive-journey').hidden=false;document.body.classList.remove('dive-swimming');
     $('dive-swim').setAttribute('aria-pressed','false');$('dive-drift').setAttribute('aria-pressed','false');
     $('dive-keyhint').textContent='Continuous travel · Stop here or use WASD to take control';
@@ -285,6 +295,7 @@ export class Expedition {
     if(this.pendingGeneration!==request)return;
     try {
       this.world.generate(id,seed,this.world.settings);
+      this.currentPlace=null;
       this.travel=null;$('dive-journey').hidden=true;this.constrain(this.app.camera.position);this.captureDrift();
       this.syncLabels();this.syncDials();this.writeURL();this.notice('');
     } catch(error){console.error('World generation failed',error);this.notice('That world could not be generated. Try a lower living cover.',true);}
@@ -312,8 +323,17 @@ export class Expedition {
     dt=this.app.paused?0:dt;
     if(this.watch?.updateCamera(dt))return;
     if(this.travel){
-      const trip=this.travel,remaining=trip.total-trip.done;
-      const speed=Math.max(remaining>100&&cam.position.y>-70?22:0,travelSpeed(-cam.position.y,remaining));
+      const trip=this.travel;
+      if(trip.safeIndex!==trip.index||trip.rockRevision!==this.world.rockRevision){
+        if(clearRockRoute(trip.points,trip.index+1,trip.index+17,this.world.rockField)){
+          let rest=cam.position.distanceTo(trip.points[Math.min(trip.index,trip.points.length-1)]);
+          for(let i=trip.index+1;i<trip.points.length;i++)rest+=trip.points[i].distanceTo(trip.points[i-1]);
+          trip.total=trip.done+rest;trip.destination.eye=trip.points.at(-1).toArray();
+        }
+        trip.safeIndex=trip.index;trip.rockRevision=this.world.rockRevision;
+      }
+      const remaining=trip.total-trip.done;
+      const speed=Math.max(remaining>400&&cam.position.y>-70?44:remaining>100&&cam.position.y>-70?22:0,travelSpeed(-cam.position.y,remaining));
       trip.speed+=(speed-trip.speed)*(1-Math.exp(-dt*1.8));
       let distance=trip.speed*dt;
       while(distance>0&&trip.index<trip.points.length){
@@ -337,6 +357,8 @@ export class Expedition {
       this.viewQuaternion.setFromRotationMatrix(this.viewMatrix);cam.quaternion.slerp(this.viewQuaternion,1-Math.exp(-dt*2.5));
       if(trip.index>=trip.points.length){
         if(trip.id)this.world.select(trip.id);
+        this.currentPlace=trip.place;
+        this.placeLabel=trip.place?trip.destination:null;
         this.floatAtSurface=trip.floatSurface||false;
         this.surfaceClearance=trip.surfaceClearance??SURFACE_EYE_HEIGHT;
         this.travel=null;$('dive-journey').hidden=true;this.captureDrift();this.syncLabels();this.setSwim(false);this.writeURL();
@@ -357,7 +379,11 @@ export class Expedition {
     const cam=this.app.camera,dir=cam.getWorldDirection(new THREE.Vector3());
     this.driftPose={eye:cam.position.toArray(),look:cam.position.clone().addScaledVector(dir,45).toArray()};this.started=this.app.time;
   }
-  constrain(position) { constrainToOcean(position,{...this.world.settings,seed:this.world.seed}); }
+  constrain(position) {
+    constrainToOcean(position,{...this.world.settings,seed:this.world.seed});
+    this.world.rockField?.project(position,.65);
+    constrainToOcean(position,{...this.world.settings,seed:this.world.seed});
+  }
   applyFlow(position,dt) {
     if(this.app.paused||position.y>this.app.waterInterface.height)return;
     const flow=this.world.flow(position);position.x+=flow.x*dt;position.y+=flow.y*dt;position.z+=flow.z*dt;
@@ -397,7 +423,7 @@ export class Expedition {
     const h=this.world.habitat;
     $('dive-title').textContent=h.name;$('dive-subtitle').textContent=h.subtitle;
     this.root.querySelectorAll('[data-site]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.site===h.id)));
-    $('world-stats').textContent=`SEED ${this.world.seed} · ${(this.world.stats.fish+this.world.stats.animals).toLocaleString()} ANIMALS · ${this.world.stats.forms} FORMS`;
+    $('world-stats').textContent=`SEED ${this.world.seed} · ${(this.world.stats.fish+this.world.stats.animals).toLocaleString()} ANIMALS LOADED · ${this.world.stats.forms} FORMS`;
     $('world-stats').dataset.forms=this.world.stats.forms;
     $('world-stats').dataset.animals=this.world.stats.fish+this.world.stats.animals;
     $('world-stats').dataset.generation=this.world.generation;$('world-stats').dataset.vertices=this.world.stats.vertices;
@@ -468,6 +494,7 @@ export class Expedition {
     a.post.settings.dof=false;a.post.settings.motionBlur=false;
     if(performance.now()-this.lastReadout<150)return;this.lastReadout=performance.now();
     this.watch?.update(this.lastReadout);
+    this.chart?.update();
     $('dive-depth-value').textContent=Math.abs(depth).toFixed(1);
     $('depth-reference').textContent=depth>=0?'BELOW THE SURFACE':'ABOVE THE SURFACE';
     $('dive-depth-value').dataset.depth=depth.toFixed(3);
@@ -481,12 +508,18 @@ export class Expedition {
     let closest=null,dist=Infinity;
     for(const site of this.world.sites.values()){const d=a.camera.position.distanceTo(new THREE.Vector3(...site.habitat.eye));if(d<dist){dist=d;closest=site.habitat;}}
     const atSite=depth>1&&dist<85&&Math.abs(a.camera.position.y-closest.eye[1])<45;
-    $('dive-title').textContent=atSite?closest.name:zone.name;
-    $('dive-subtitle').textContent=atSite?closest.subtitle:zone.subtitle;
-    const neighbors=this.world.fauna.nearbySpecies;
+    const regional=depth>1&&a.camera.position.y-this.world.floor(a.camera.position.x,a.camera.position.z)<90?regionName(a.camera.position.x,a.camera.position.z,this.world.recipe):null;
+    const place=this.currentPlace&&this.placeLabel&&a.camera.position.distanceTo(new THREE.Vector3(...this.placeLabel.eye))<80?this.placeLabel:null;
+    $('dive-title').textContent=atSite?closest.name:place?.name||regional?.name||zone.name;
+    $('dive-subtitle').textContent=atSite?closest.subtitle:place?.description||regional?.subtitle||zone.subtitle;
+    const neighbors=[...new Set([...this.world.fauna.nearbySpecies,...this.world.regionalLife.nearbySpecies])].slice(0,4);
     $('fauna-readout').textContent=neighbors.length?(atSurface?'Below · ':'Nearby · ')+neighbors.join(' · '):'';
-    $('fauna-readout').dataset.count=this.world.fauna.visibleCount;
-    this.root.querySelectorAll('[data-site]').forEach(b=>b.setAttribute('aria-pressed',String(atSite&&b.dataset.site===closest.id)));
+    $('fauna-readout').dataset.count=this.world.fauna.visibleCount+this.world.regionalLife.visibleCount;
+    this.root.querySelectorAll('[data-site]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.site===(atSite?closest.id:regional?.id))));
+    const loaded=this.world.stats.fish+this.world.stats.animals+this.world.regionalLife.population.length;
+    $('world-stats').textContent=`SEED ${this.world.seed} · ${loaded.toLocaleString()} ANIMALS LOADED · ${this.world.stats.forms} FORMS`;
+    $('world-stats').dataset.animals=loaded;$('world-stats').dataset.biomeCells=this.world.scenery.cells.size;
+    $('world-stats').dataset.biomeScenery=this.world.scenery.visibleInstances;$('world-stats').dataset.regionalAnimals=this.world.regionalLife.visibleCount;
     if(this.travel){
       const t=this.travel;$('journey-label').textContent=`${t.ascending?'Ascending to':'Travelling to'} ${t.title}`;
       $('journey-progress').value=t.total>0?t.done/t.total:1;
@@ -510,6 +543,10 @@ export class Expedition {
     if(this.floatAtSurface)p.set('surface',this.surfaceClearance<.5?'waterline':'1');
     else if(this.app.camera.position.y>this.app.waterInterface.height)p.set('surface','1');
     else if(Math.abs(this.app.camera.position.y-this.world.habitat.eye[1])>45)p.set('depth',Math.round(-this.app.camera.position.y));
+    if(this.currentPlace){
+      const place=explorationStops(this.world.recipe).find(s=>s.id===this.currentPlace);
+      if(place&&this.app.camera.position.distanceTo(new THREE.Vector3(...place.eye))<80&&!this.floatAtSurface){p.set('place',place.id);p.delete('depth');}
+    }
     if(this.lampMode!=='auto')p.set('lamp',this.lampMode);
     if(!this.app.quality.adaptive){p.set('preset',this.app.quality.presetName);p.set('adaptive','0');}
     if(this.app.params.get('profile')==='1')p.set('profile','1');

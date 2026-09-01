@@ -4,33 +4,56 @@ import { seeded, TAU } from './WorldMath.js';
 import { Batch, rockGeometry, paintGeometry, segment } from './ReefGeometry.js';
 import { jellyGeometry } from './MarineLife.js';
 import { waterMaterial } from './UnderwaterMaterial.js';
+import { BIOME_CELL } from './BiomeLayout.js';
+
+export function floorTile(x,z,size,segments,recipe) {
+  const stride=segments+1,count=stride*stride;
+  const pos=new Float32Array(count*3),normal=new Float32Array(count*3),colors=new Float32Array(count*3),uv=new Float32Array(count*2);
+  const indices=count>65535?new Uint32Array(segments*segments*6):new Uint16Array(segments*segments*6);
+  const sand=new THREE.Color('#b9b29a'),basalt=new THREE.Color('#85857a'),c=new THREE.Color(),n=new THREE.Vector3();
+  let cursor=0;
+  for(let j=0;j<=segments;j++)for(let i=0;i<=segments;i++){
+    const k=j*stride+i,px=x+i/segments*size,pz=z+j/segments*size,y=oceanFloor(px,pz,recipe);
+    pos.set([px,y,pz],k*3);uv.set([px*.01,pz*.01],k*2);
+    n.set(oceanFloor(px-.4,pz,recipe)-oceanFloor(px+.4,pz,recipe),.8,oceanFloor(px,pz-.4,recipe)-oceanFloor(px,pz+.4,recipe)).normalize();normal.set(n.toArray(),k*3);
+    c.copy(sand).lerp(basalt,THREE.MathUtils.smoothstep(-y,70,420)).multiplyScalar(.93+Math.sin(px*.11)*Math.cos(pz*.12)*.045);colors.set([c.r,c.g,c.b],k*3);
+    if(i<segments&&j<segments){indices.set([k,k+stride,k+1,k+1,k+stride,k+stride+1],cursor);cursor+=6;}
+  }
+  const g=new THREE.BufferGeometry();
+  for(const [key,array,itemSize] of [['position',pos,3],['normal',normal,3],['color',colors,3],['uv',uv,2],['aFlex',new Float32Array(count),1]])g.setAttribute(key,new THREE.BufferAttribute(array,itemSize));
+  g.setIndex(new THREE.BufferAttribute(indices,1));g.computeBoundingSphere();return g;
+}
+
+export class OceanFloorDetail {
+  constructor(group,recipe,window) {
+    this.group=group;this.recipe=recipe;this.window=window;this.tiles=new Map();this.key=null;
+    this.material=waterMaterial(0,{name:'local-bathymetry'});
+  }
+  update(position) {
+    const x=Math.floor(position.x/BIOME_CELL),z=Math.floor(position.z/BIOME_CELL),key=`${x},${z}`;
+    if(key===this.key)return false;
+    const wanted=new Set();
+    // A complete square masks the coarse distant bed. Shared coordinates and
+    // analytic normals make the detailed tile edges coincide exactly.
+    for(let dz=-3;dz<=3;dz++)for(let dx=-3;dx<=3;dx++){
+      const tx=x+dx,tz=z+dz,k=`${tx},${tz}`;wanted.add(k);
+      if(this.tiles.has(k))continue;
+      const mesh=new THREE.Mesh(floorTile(tx*BIOME_CELL,tz*BIOME_CELL,BIOME_CELL,32,this.recipe),this.material);
+      mesh.name=`Detailed seabed ${k}`;this.tiles.set(k,mesh);this.group.add(mesh);
+    }
+    for(const [k,mesh] of this.tiles)if(!wanted.has(k)){this.group.remove(mesh);mesh.geometry.dispose();this.tiles.delete(k);}
+    this.window.value.set((x-3)*BIOME_CELL,(z-3)*BIOME_CELL,(x+4)*BIOME_CELL,(z+4)*BIOME_CELL);this.key=key;
+    return true;
+  }
+}
 
 export function createOceanTerrain(recipe) {
   const group=new THREE.Group();group.name='Continuous continental shelf and trench';
-  const xs=[-2600,-1900,-1300,-850,-600];
-  for(let x=-450;x<=450;x+=3)xs.push(x);
-  xs.push(600,850,1300,1900,2600);
-  const zs=[-2600,-1900,-1300,-1080];
-  for(let z=-980;z<=420;z+=3)zs.push(z);
-  zs.push(600,850,1300,1900,2600);
-  const positions=[],colors=[],uv=[],index=[];
-  const sand=new THREE.Color('#b9b29a'),basalt=new THREE.Color('#85857a');
-  for(let j=0;j<zs.length;j++)for(let i=0;i<xs.length;i++) {
-    const x=xs[i],z=zs[j],y=oceanFloor(x,z,recipe),depth=-y;
-    positions.push(x,y,z);uv.push(x*.01,z*.01);
-    const c=sand.clone().lerp(basalt,THREE.MathUtils.smoothstep(depth,70,420));
-    const patch=Math.sin(x*.11)*Math.cos(z*.12)*.045;
-    c.multiplyScalar(.93+patch);colors.push(c.r,c.g,c.b);
-    if(i<xs.length-1&&j<zs.length-1){const n=j*xs.length+i;index.push(n,n+xs.length,n+1,n+1,n+xs.length,n+xs.length+1);}
-  }
-  const geometry=new THREE.BufferGeometry();
-  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
-  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
-  geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
-  geometry.setAttribute('aFlex',new THREE.Float32BufferAttribute(new Float32Array(positions.length/3),1));
-  geometry.setIndex(index);geometry.computeVertexNormals();
-  const terrain=new THREE.Mesh(geometry,waterMaterial(0,{name:'continental-bathymetry'}));
+  const material=waterMaterial(0,{name:'continental-bathymetry',farSeabed:true});
+  const window={value:new THREE.Vector4(1,1,0,0)};material.uniforms.uFloorWindow=window;
+  const terrain=new THREE.Mesh(floorTile(-2624,-2624,5248,328,recipe),material);
   terrain.name='Unbroken seabed';group.add(terrain);
+  group.floorDetail=new OceanFloorDetail(group,recipe,window);
 
   const rng=seeded(recipe.seed+918);
   const stone=new Batch(waterMaterial(1,{name:'basalt-escarpment'}));

@@ -138,6 +138,22 @@ body.lab-open .dive-depth { opacity: 0; }
 .field-journal .journal-meta { font: 10px/1.7 ui-monospace,Consolas,monospace; color: #a8c3b6; }
 .field-journal .journal-caveat { font-size: 11px; border-top: 1px solid #b0c4b632; padding-top: 16px; }
 .field-journal article a { font-size: 11px; }
+.expedition-chart { width: min(860px,calc(100vw - 32px)); }
+.expedition-chart .chart-intro { max-width: 670px; margin-bottom: 22px; }
+.chart-layout { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(230px,1fr); gap: 28px; align-items: center; }
+.chart-layout canvas { display: block; width: 100%; height: auto; cursor: pointer; }
+.chart-details label { display: block; font-size: 11px; color: #c5dbce; }
+.chart-details select { display: block; width: 100%; margin: 8px 0 23px; padding: 11px 8px; border: 1px solid #8fae9d80; border-radius: 0; color: #e0e8d7; background: #102e36; font: 12px sans-serif; }
+.chart-details h3 { font: normal 27px/1.2 Georgia,serif; color: #e4e7cd; margin: 0; }
+.expedition-chart .chart-readout { font: 10px/1.7 ui-monospace,Consolas,monospace; color: #d7e0bc; }
+.expedition-chart .chart-note { margin-top: 25px; font-size: 11px; line-height: 1.7; }
+.expedition-chart .chart-legend { display: flex; justify-content: center; gap: 13px; margin: 4px 0 0; font-size: 10px; }
+.chart-legend span:before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 5px; background: #46756b; }
+.chart-legend span:nth-child(2):before { background: #697444; }
+.chart-legend span:nth-child(3):before { background: #365862; }
+.chart-legend span:nth-child(4):before { background: #293d56; }
+.expedition-chart button, .expedition-chart select { cursor: pointer; }
+.expedition-chart button:focus-visible, .expedition-chart select:focus-visible { outline: 2px solid #d7e6ba; outline-offset: 4px; }
 @media(max-width: 900px) {
   .dive-caption { bottom: 165px; }
   .dive-bottom { flex-direction: column-reverse; align-items: stretch; gap: 13px; }
@@ -162,6 +178,8 @@ body.lab-open .dive-depth { opacity: 0; }
   .dive-journey { top: 78px; left: 20px; width: calc(100vw - 115px); font-size: 9px; }
   #expedition #journey-stop { margin-left: 9px; font-size: 9px; }
   #expedition .dive-actions .dive-action { padding: 0 8px; gap: 4px; }
+  #dive-chart span { display: none; }
+  #expedition #dive-chart { min-width: 36px; }
   .dive-actions .dive-action svg { width: 12px; }
   .dive-wordmark { font-size: 16px; letter-spacing: .16em; }
   .dive-depth { right: 20px; top: 26%; }
@@ -195,12 +213,18 @@ body.lab-open .dive-depth { opacity: 0; }
   .observing .dive-mobile { bottom: auto; top: 90px; }
   .dive-transport-buttons { gap: 3px; }
   #expedition .dive-transport .dive-action { padding: 0 7px; min-height: 44px; min-width: 40px; }
+  .chart-layout { grid-template-columns: minmax(0,1fr); gap: 21px; }
+  .expedition-chart { padding: 23px; }
+  .chart-layout canvas { max-width: 350px; margin: 0 auto; }
+  .chart-details select { margin-bottom: 18px; }
 }
 @media(max-width: 600px) and (max-height: 740px) {
   .dive-depth { top: 16%; }
   .dive-caption h1 { font-size: 30px; }
 }
 @media(max-width: 380px) {
+  .dive-header { left: 12px; right: 12px; gap: 4px; }
+  .dive-wordmark { font-size: 13px; letter-spacing: .11em; }
   #dive-surface span, #dive-descend span:last-child { display: none; }
   #expedition .dive-actions .dive-action { min-width: 42px; }
   #dive-lab-toggle span { white-space: nowrap; }

@@ -44,6 +44,14 @@ export class RockField {
     }
   }
   near(x,z){return this.cells.get(`${Math.floor(x/CELL)},${Math.floor(z/CELL)}`)||[];}
+  roof(x,z,clearance=.85){
+    let y=-Infinity;
+    for(const rock of this.near(x,z)){
+      const d=((x-rock.x)/(rock.rx+clearance))**2+((z-rock.z)/(rock.rz+clearance))**2;
+      if(d<1)y=Math.max(y,rock.y+(rock.ry+clearance)*Math.sqrt(1-d)+clearance);
+    }
+    return y;
+  }
   project(p,radius,benthic=false){
     for(let pass=0;pass<2;pass++)for(const rock of this.near(p.x,p.z)){
       const rx=rock.rx+radius,ry=rock.ry+radius,rz=rock.rz+radius;
@@ -58,6 +66,22 @@ export class RockField {
       }
     }
   }
+}
+
+// Lift upcoming travel segments before the camera reaches a boulder. Sampling
+// the segment also catches narrow rocks between two navigation waypoints.
+export function clearRockRoute(points,start,end,field) {
+  let changed=false;
+  for(let i=Math.max(1,start);i<=Math.min(end,points.length-1);i++){
+    const a=points[i-1],b=points[i],steps=Math.max(1,Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)));
+    let roof=-Infinity;
+    for(let n=0;n<=steps;n++){
+      const t=n/steps,y=a.y+(b.y-a.y)*t,h=field.roof(a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t);
+      if(h>y)roof=Math.max(roof,h);
+    }
+    if(Number.isFinite(roof)){a.y=Math.max(a.y,roof);b.y=Math.max(b.y,roof);changed=true;}
+  }
+  return changed;
 }
 
 /** Seeded route-following with inertia, local schooling and bounded avoidance.

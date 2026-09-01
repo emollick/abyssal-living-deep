@@ -237,6 +237,7 @@ void main() {
   vec4 wp = vec4(p,1.0);
   #ifdef USE_INSTANCING
     wp = instanceMatrix * wp;
+    n /= vec3(dot(instanceMatrix[0].xyz,instanceMatrix[0].xyz),dot(instanceMatrix[1].xyz,instanceMatrix[1].xyz),dot(instanceMatrix[2].xyz,instanceMatrix[2].xyz));
     n = mat3(instanceMatrix) * n;
   #endif
   wp = modelMatrix * wp;
@@ -273,6 +274,12 @@ uniform float uGlow;
 uniform float uOpacity;
 uniform float uPattern;
 uniform float uMotion;
+#ifdef FAR_SEABED
+uniform vec4 uFloorWindow;
+#endif
+#ifdef BIOME_SCENERY
+uniform float uSceneryRange;
+#endif
 #ifdef FAUNA
 varying float vGlow;
 varying float vTissue;
@@ -303,6 +310,13 @@ float waterSpecular(vec3 n,vec3 v,vec3 l,float roughness,float f0) {
   return min(5.0,distribution*visibility*fresnel/max(.004,4.0*nv*nl))*nl;
 }
 void main() {
+  #ifdef FAR_SEABED
+    if(vWorld.x>=uFloorWindow.x&&vWorld.z>=uFloorWindow.y&&vWorld.x<uFloorWindow.z&&vWorld.z<uFloorWindow.w)discard;
+  #endif
+  #ifdef BIOME_SCENERY
+    float fade=smoothstep(uSceneryRange-24.0,uSceneryRange,length(vWorld-uCamPos));
+    if(fract(sin(dot(floor(gl_FragCoord.xy),vec2(12.9898,78.233)))*43758.5453)<fade)discard;
+  #endif
   vec3 n = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);
   vec3 viewDir = normalize(uCamPos-vWorld);
   float dist = length(vWorld-uCamPos);
@@ -448,7 +462,7 @@ export function waterMaterial(kind = 1, options = {}) {
     glslVersion: THREE.GLSL3,
     vertexShader: VERT, fragmentShader: FRAG,
     uniforms: { ...U, uKind: { value: kind }, uPattern: { value: options.pattern || 0 }, uMotion: { value: options.motion || 0 }, uGlow: { value: options.glow || 0 }, uOpacity: { value: options.opacity ?? 1 }, uAnchored:{value:options.anchored?1:0},uSkinKind:{value:options.skin??0},uAnimalMotion:{value:new THREE.Vector4(0,1,0,0)} },
-    defines: { ...(options.fauna?{FAUNA:1}:{}), ...(options.animalMotion?{ANIMAL_MOTION:1}:{}) },
+    defines: { ...(options.fauna?{FAUNA:1}:{}), ...(options.animalMotion?{ANIMAL_MOTION:1}:{}), ...(options.biome?{BIOME_SCENERY:1}:{}), ...(options.farSeabed?{FAR_SEABED:1}:{}) },
     side: options.side ?? THREE.DoubleSide,
     transparent: options.transparent || false,
     depthWrite: options.depthWrite ?? !options.transparent,
